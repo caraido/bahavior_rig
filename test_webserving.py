@@ -5,7 +5,7 @@ from cv2 import imencode
 def randomData():
   while True:
     #rand(300,200)
-    (flag, encodedImage) = imencode('.jpg', random.rand(300,200))
+    (flag, encodedImage) = imencode('.jpg', 256*random.rand(300,200))
     if not flag:
       continue
 
@@ -20,5 +20,17 @@ def index():
 def camera1():
   return Response(randomData(), mimetype = 'multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/camera2')
+def camera1():
+  return Response(randomData(), mimetype = 'multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/camera3')
+def camera1():
+  return Response(randomData(), mimetype = 'multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/camera4')
+def camera1():
+  return Response(randomData(), mimetype = 'multipart/x-mixed-replace; boundary=frame')
+
 if __name__ == '__main__':
-  app.run(host='127.0.0.1',port='8080',debug=True, use_reloader=False)
+  app.run(host='127.0.0.1',port='3001',debug=True, use_reloader=False)
