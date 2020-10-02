@@ -21,15 +21,15 @@ def camera1():
   return Response(randomData(), mimetype = 'multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/camera2')
-def camera1():
+def camera2():
   return Response(randomData(), mimetype = 'multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/camera3')
-def camera1():
+def camera3():
   return Response(randomData(), mimetype = 'multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/camera4')
-def camera1():
+def camera4():
   return Response(randomData(), mimetype = 'multipart/x-mixed-replace; boundary=frame')
 
 if __name__ == '__main__':
