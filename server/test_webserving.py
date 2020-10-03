@@ -28,7 +28,7 @@ def show_data(camera_id):
 @app.route('/api/', methods = ['POST'])
 def start_recording():
   print('got record request')
-  return render_template('index.html', flask_token = "Hello world")
+  return Response(status=200) #lets the browser know that we received its request
 
 #host the server on the local machine
 if __name__ == '__main__':
