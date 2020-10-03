@@ -9,7 +9,7 @@ def randomData():
     if not flag:
       continue
 
-    yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n') #convert to a bytearray for serving
+    yield(b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + bytes(encodedImage) + b'\r\n') #convert to a bytearray for serving
 
 #create the server
 app = Flask(__name__)
@@ -20,7 +20,7 @@ def index():
   return render_template('index.html', flask_token="Hello world")
 
 #individual cameras will be available at /cameraN
-@app.route(f'/camera<int:camera_id>')
+@app.route('/camera<int:camera_id>')
 def show_data(camera_id):
   return Response(randomData(), mimetype = 'multipart/x-mixed-replace; boundary=frame')
 
