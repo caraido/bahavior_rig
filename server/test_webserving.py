@@ -17,7 +17,7 @@ app = Flask(__name__)
 #define the index route
 @app.route('/')
 def index():
-  return render_template('index.html')
+  return render_template('index.html', flask_token="Hello world")
 
 #individual cameras will be available at /cameraN
 @app.route(f'/camera<int:camera_id>')
@@ -28,7 +28,7 @@ def show_data(camera_id):
 @app.route('/api/', methods = ['POST'])
 def start_recording():
   print('got record request')
-  return render_template('index.html')
+  return render_template('index.html', flask_token = "Hello world")
 
 #host the server on the local machine
 if __name__ == '__main__':
