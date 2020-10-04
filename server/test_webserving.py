@@ -1,4 +1,4 @@
-from flask import Response, Flask, render_template
+from flask import Response, Flask, render_template, request
 from numpy import random
 from cv2 import imencode
 
@@ -27,7 +27,7 @@ def show_data(camera_id):
 #allow user to interact with the recording through a simple API
 @app.route('/api/', methods = ['POST'])
 def start_recording():
-  print('got record request')
+  print(request.json['test'])
   return Response(status=200) #lets the browser know that we received its request
 
 #host the server on the local machine

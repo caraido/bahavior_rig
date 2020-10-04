@@ -19,7 +19,10 @@ class App extends Component {
   onClick = () => {
     fetch('/api/', {
       method: 'POST',
-      body: '',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({test: true}),
     });
   }
   
