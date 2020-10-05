@@ -1,7 +1,6 @@
 import PySpin
 
 this_cam = 0
-NCAMERAS = 1
 
 system = PySpin.System.GetInstance()
 cam_list = system.GetCameras()
@@ -19,28 +18,22 @@ cam.TriggerMode.SetValue(PySpin.TriggerMode_On)
 
 # setup saving
 
-def save_frame(camera_index=None, frame=None, stop=False):
-  recorders = []
-  for i in range(NCAMERAS):
-    file_name = f'demo_camera{i}_uncompressed'
-    recorder = PySpin.AVIRecorder()
-    option = PySpin.AVIOption()  # for uncompressed
-    option.frameRate = 30  # framerate in Hz of saved file ~ realtime
+def save_frame(frame=None, stop=False):
+  recorder = PySpin.AVIRecorder()
+  option = PySpin.AVIOption()  # for uncompressed
+  option.frameRate = 30  # framerate in Hz of saved file ~ realtime
 
-    recorder.AVIOpen(file_name, option)
-
-    recorders.append(recorder)
+  recorder.AVIOpen(f'demo_camera{this_cam}_uncompressed', option)
 
   yield  # the first time this function is called it will stop here
 
   while not stop:
     # need to optimize here ~ can we save many frames at a time? should we use a different package??
-    recorders[camera_index].AVIAppend(frame)
+    recorder.AVIAppend(frame)
     yield
 
   # when we call the function with stop=True we want to close the files
-  for i in range(NCAMERAS):
-    recorders[i].AVIClose()
+  recorder.AVIClose()
 
 
 save_frame()  # opens files
