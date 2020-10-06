@@ -30,10 +30,14 @@ with nidaqmx.Task() as audio, nidaqmx.Task() as video:
   video.triggers.start_trigger.cfg_dig_edge_start_trig(
       "/Dev1/ai/StartTrigger"
   )  # start the video trigger with the audio channel
+  video.timing.cfg_implicit_timing(
+      sample_mode=AcquisitionType.CONTINUOUS
+  )  # configure the trigger to repeat until the task is stopped
   video.control(
       TaskMode.TASK_COMMIT
   )
 
+  video.start()
   audio.start()  # fires the ai start trigger, which should also start the video trigger sequence
 
   # demo: display 1 second of data
@@ -42,7 +46,7 @@ with nidaqmx.Task() as audio, nidaqmx.Task() as video:
   )
 
   fig = {
-      "data": [{"type": "scatter", "y": data[0]}, {"type": "scatter", "y": data[1]}]
+      "data": [{"type": "scatter", "y": data[1]}, {"type": "scatter", "y": data[0]}]
   }
 
   pio.show(fig)
