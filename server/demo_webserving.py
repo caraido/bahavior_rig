@@ -19,23 +19,20 @@ def random_data():
 # create the server
 app = Flask(__name__)
 
+
 # define the index route
-
-
 @app.route('/')
 def index():
   return render_template('index.html', flask_token="Hello world")
 
+
 # individual cameras will be available at /cameraN
-
-
 @app.route('/camera<int:camera_id>')
 def show_data(camera_id):
   return Response(random_data(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+
 # allow user to interact with the recording through a simple API
-
-
 @app.route('/api/', methods=['POST'])
 def start_recording():
   print(request.json['test'])
