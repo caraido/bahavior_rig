@@ -1,3 +1,10 @@
+# let's see how much of this we can transition to opencv... perhaps all of it
+# opencv allows encoding of np arrays in hevc, which we may want to do online for compression
+# # note that this will potentially consume a lot of cpu resources but should be within spec
+# opencv will also be very useful for online analysis
+
+# also i think the generator function is incorrectly implemented...
+
 import PySpin
 
 this_cam = 0

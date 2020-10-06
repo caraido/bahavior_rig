@@ -1,8 +1,12 @@
+# this demo serves a react app that streams white noise data encoded in jpeg
+
+# in practice we will want to stream hevc data, which requires a different approach due to interframe compression
+# we can do this using the libde265.js javascript decoder, modified for websockets (https://github.com/strukturag/libde265.js/pull/10/files/4d29e7bf3a1de850b8c3810610d16bd14698de0d)
+# frames will be transmitted by flask in chunks via a websocket and attached to a canvas in js
+
 from flask import Response, Flask, render_template, request
 from numpy import random
 from cv2 import imencode
-
-# in place of recording, generate some white noise using numpy
 
 
 def random_data():
