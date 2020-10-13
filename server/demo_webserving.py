@@ -7,17 +7,37 @@
 from flask import Response, Flask, render_template, request
 from numpy import random
 from cv2 import imencode
+import time
 
 
 def random_data():
+  period = 1/15  # throttle the framerate, improves performance
+  # determines the temporal precision of the displayed frames...
+  sleep_time = period/3
+  last_time = time.time()
+
   while True:
     # encode the data using jpg format
-    (flag, encoded_image) = imencode('.jpg', 256*random.rand(300, 200))
+    # (flag, encoded_image) = imencode('.jpg', 256*random.rand(300, 200))
+    (flag, encoded_image) = imencode('.bmp', 256*random.rand(300, 200))
     if not flag:
       continue
 
     # convert to a bytearray for serving
-    yield(b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + bytes(encoded_image) + b'\r\n')
+    # data = b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + encoded_image.tobytes() + \
+      # b'\r\n'
+
+    data = b'--frame\r\nContent-Type: image/bmp\r\n\r\n' + encoded_image.tobytes() + \
+        b'\r\n'
+
+    while time.time() - last_time < period:
+      time.sleep(sleep_time)
+
+    last_time = time.time()
+    yield data
+    # yield(b'--frame\r\nContent-Type: image/bmp\r\n\r\n' + encoded_image.tobytes() + b'\r\n')
+
+  # try encoding as bmp (image/bmp, imencode('bmp'...)) ~ i.e. non-compressed
 
 
 # create the server
