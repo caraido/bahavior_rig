@@ -7,10 +7,10 @@ class App extends Component {
     return (
       <div className="App">
         <p>{window.token}</p>
-        <img src='/camera0'/>
+        {/* <img src='/camera0'/>
         <img src='/camera1'/>
         <img src='/camera2'/>
-        <img src='/camera3'/>
+        <img src='/camera3'/> */}
         <button onClick={this.onClick}>Click me</button>
       </div>
     );
@@ -22,10 +22,10 @@ class App extends Component {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({test: true}),
+      body: JSON.stringify({ test: true }),
     });
   }
-  
+
 }
 
 export default App;

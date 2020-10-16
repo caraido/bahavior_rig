@@ -5,58 +5,68 @@
 # frames will be transmitted by flask in chunks via a websocket and attached to a canvas in js
 
 from flask import Response, Flask, render_template, request
+from flask_socketio import SocketIO, Namespace, emit
 from numpy import random
 from cv2 import imencode
 import time
 
+async_mode = 'threading'
 
-def random_data():
-  period = 1/15  # throttle the framerate, improves performance
-  # determines the temporal precision of the displayed frames...
-  sleep_time = period/3
-  last_time = time.time()
 
-  while True:
-    # encode the data using jpg format
-    # (flag, encoded_image) = imencode('.jpg', 256*random.rand(300, 200))
-    (flag, encoded_image) = imencode('.bmp', 256*random.rand(300, 200))
-    if not flag:
-      continue
+class VideoStreamSocketHandler(Namespace):
+  def on_connect(self):
+    print('socket opened')
 
-    # convert to a bytearray for serving
-    # data = b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + encoded_image.tobytes() + \
-      # b'\r\n'
+  def on_start(self, params):
+    print('params: ', params)
 
-    data = b'--frame\r\nContent-Type: image/bmp\r\n\r\n' + encoded_image.tobytes() + \
-        b'\r\n'
+    chunk_size = params['chunk_size']
+    period = 1 / params['fps']
 
-    while time.time() - last_time < period:
-      time.sleep(sleep_time)
+    f = open('./static/spreedmovie.hevc', 'rb')
 
-    last_time = time.time()
-    yield data
-    # yield(b'--frame\r\nContent-Type: image/bmp\r\n\r\n' + encoded_image.tobytes() + b'\r\n')
+    while True:
+      data = f.read(chunk_size)
+      if not data or len(data) != chunk_size:
+        print('Done!')
+        emit('frames', {'flush': True})  # unclear...
+        f.close()
+        break
+      emit('frames', {'data': data})  # mode = binary?
+      time.sleep(period)
 
-  # try encoding as bmp (image/bmp, imencode('bmp'...)) ~ i.e. non-compressed
+  def on_disconnect(self):
+    print('Socket closed')
 
 
 # create the server
 app = Flask(__name__)
+socketio = SocketIO(app, async_mode=async_mode)
 
-
+socketio.on_namespace(VideoStreamSocketHandler('/video0'))
 # define the index route
+
+
 @app.route('/')
 def index():
-  return render_template('index.html', flask_token="Hello world")
+  return render_template('index.html', flask_token="Hello world", async_mode=async_mode)
 
 
-# individual cameras will be available at /cameraN
-@app.route('/camera<int:camera_id>')
-def show_data(camera_id):
-  return Response(random_data(), mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/hevcdemo')
+def hevcdemo():
+  return render_template('socket_libde265.html')
 
 
-# allow user to interact with the recording through a simple API
+@socketio.on('connect')
+def connected():
+  print('connection established')
+
+
+@socketio.on('msg')
+def misc(message):
+  print(message)
+
+
 @app.route('/api/', methods=['POST'])
 def start_recording():
   print(request.json['test'])
@@ -66,4 +76,5 @@ def start_recording():
 
 # host the server on the local machine
 if __name__ == '__main__':
-  app.run(host='127.0.0.1', port='3001', debug=True, use_reloader=False)
+  socketio.run(app, host='127.0.0.1', port=3001,
+               debug=True, use_reloader=False)
