@@ -17,7 +17,7 @@ cam.AcquisitionMode.SetValue(PySpin.AcquisitionMode_Continuous)
 
 # allows setting of the framerate, for test only
 cam.AcquisitionFrameRateEnable.SetValue(True)
-cam.AcquisitionFrameRate.SetValue(15)
+cam.AcquisitionFrameRate.SetValue(30)
 
 byte_io = BytesIO()
 
@@ -45,7 +45,7 @@ def gen(camera):
 
 @app.route('/video0')
 def video0():
-  print(time.time())
+  # print(time.time())
   cam.BeginAcquisition()
   return Response(gen(cam), mimetype='multipart/x-mixed-replace; boundary=frame')
 
