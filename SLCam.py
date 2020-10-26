@@ -258,12 +258,18 @@ class CameraGroup:
   def __init__(self):
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
+    self.nCameras = self._camlist.GetSize()
     self.cameras = [Camera(self._camlist, i)
-                    for i in range(self._camlist.GetSize())]
+                    for i in range(nCameras)]
 
-  def start(self, filepaths, routes):
-    for cam, fp, route in zip(self.cameras, filepaths, routes):
-      cam.start(filepath=fp, route=r)
+  def start(self, filepaths=None, isDisplayed=None):
+    if not filepaths:
+      filepaths = [None]*self.nCameras
+    if not isDisplayed:
+      isDisplayed = [False]*self.nCameras
+
+    for cam, fp, disp in zip(self.cameras, filepaths, isDisplayed):
+      cam.start(filepath=fp, display=disp)
 
   def stop(self):
     for cam in self.cameras:
