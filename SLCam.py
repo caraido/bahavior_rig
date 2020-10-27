@@ -96,10 +96,12 @@ class Camera:
     self._spincam = camlist.GetByIndex(index)
     self._spincam.Init()
 
-    # here we will eventually want to enable hardware triggering
-    # for now we'll just hardcode the framerate at 30
-    self._spincam.AcquisitionFrameRateEnable.SetValue(True)
-    self._spincam.AcquisitionFrameRate.SetValue(30)
+    # hardware triggering
+    self._spincam.AcquisitionMode.SetValue(PySpin.AcquisitionMode_Continuous)
+    # trigger has to be off to change source
+    self._spincam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
+    self._spincam.TriggerSource.SetValue(PySpin.TriggerSource_Line0)
+    self._spincam.TriggerMode.SetValue(PySpin.TriggerMode_On)
 
     self.device_serial_number, self.height, self.width = self.get_camera_property()
     self.calib = Calib()
