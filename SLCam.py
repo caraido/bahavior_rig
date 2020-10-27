@@ -428,15 +428,15 @@ class AcquisitionGroup:
 
   def start(self, filepaths=None, isDisplayed=None):
     if not filepaths:
-      filepaths = [None] * self.nCameras
+      filepaths = [None] * (self.nCameras + 1)
     if not isDisplayed:
-      isDisplayed = [False] * self.nCameras
+      isDisplayed = [False] * (self.nCameras + 1)
 
-    for cam, fp, disp in zip(self.cameras, filepaths, isDisplayed):
+    for cam, fp, disp in zip(self.cameras, filepaths[:-1], isDisplayed[:-1]):
       cam.start(filepath=fp, display=disp)
 
     # once the camera BeginAcquisition methods are called, we can start triggering
-    self.nidaq.start()
+    self.nidaq.start(filepath=filepaths[-1], display=isDisplayed[-1])
 
   def run(self):
     # begin gathering samples

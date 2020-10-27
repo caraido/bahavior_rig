@@ -6,22 +6,21 @@ from flask_socketio import SocketIO, emit
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='threading')
 
-cg = SLCam.CameraGroup()
+ag = SLCam.AcquisitionGroup()
 
 # this section is a placeholder
 # we will want to use the GUI to manage these settings
-cg.start(
-    filepaths=['C:\\Users\\SchwartzLab\\Desktop\\Testing.mov'], isDisplayed=[True])
+ag.start(
+    filepaths=['C:\\Users\\SchwartzLab\\Desktop\\Testing.mov', 'C:\\Users\\SchwartzLab\\Desktop\\Testing.tdms'], isDisplayed=[True, True])
 
 # run collection in the background -- this should ultimately be initiated by a gui button
-grabber = threading.Thread(target=cg.cameras[0].run)
-grabber.start()  # will run until the stop() method is called
+ag.run()
 
-emitter = threading.Thread(target=cg.nidaq.display, args=(socketio))
+emitter = threading.Thread(target=ag.nidaq.display, args=(socketio))
 emitter.start()
 
 # api_switch = {
-#     'start_camera_group': cg.start,
+#     'start_camera_group': ag.start,
 # }
 
 # @app.route('/api', methods=['POST'])
@@ -34,19 +33,19 @@ emitter.start()
 
 @socketio.on('connect')
 def connected():
-  emit('settings', {'center': 0, 'fs': cg.nidaq.sample_rate})
+  emit('settings', {'center': 0, 'fs': ag.nidaq.sample_rate})
   # don't actually know what center should be...
 
 
 @app.route('/api/stop')
 def stop_running():
-  cg.cameras[0].stop()
-  # should close sockets?
+  ag.stop()
+  socketio.emit('stopped')
 
 
 @app.route('/video/<int:cam_id>')
 def generate_frame(cam_id):
-  return Response(cg.cameras[cam_id].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
+  return Response(ag.cameras[cam_id].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/')
