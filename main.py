@@ -1,7 +1,10 @@
 import SLCam
 import threading
 from flask import Flask, Response, render_template
+from flask_socketio import SocketIO, emit
 
+app = Flask(__name__)
+socketio = SocketIO(app, async_mode='threading')
 
 cg = SLCam.CameraGroup()
 
@@ -12,11 +15,10 @@ cg.start(
 
 # run collection in the background -- this should ultimately be initiated by a gui button
 grabber = threading.Thread(target=cg.cameras[0].run)
-grabber.start() #will run until the stop() method is called
+grabber.start()  # will run until the stop() method is called
 
-
-app = Flask(__name__)
-
+emitter = threading.Thread(target=cg.nidaq.display, args=(socketio))
+emitter.start()
 
 # api_switch = {
 #     'start_camera_group': cg.start,
@@ -28,9 +30,18 @@ app = Flask(__name__)
 #     api_switch.get(request.form['action'])()
 
 # this is a placeholder, mimicking a post request using a get request
+
+
+@socketio.on('connect')
+def connected():
+  emit('settings', {'center': 0, 'fs': cg.nidaq.sample_rate})
+  # don't actually know what center should be...
+
+
 @app.route('/api/stop')
 def stop_running():
   cg.cameras[0].stop()
+  # should close sockets?
 
 
 @app.route('/video/<int:cam_id>')
@@ -44,4 +55,5 @@ def index():
 
 
 if __name__ == '__main__':
-  app.run(host='127.0.0.1', port=3001, debug=True, use_reloader=False)
+  socketio.run(app, host='127.0.0.1', port=3001,
+               debug=True, use_reloader=False)

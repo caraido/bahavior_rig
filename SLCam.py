@@ -187,7 +187,7 @@ class Camera:
       with self._frame_lock:
         self.frame = frame
         self.frame_count += 1
-      self.display()
+      # self.display()
 
     im.Release()
 
@@ -251,15 +251,16 @@ class Camera:
 
   def display(self):
     # cv2.imshow('frame', self.frame)
-    with self._frame_lock:
-      frame_count = self.frame_count  # get the starting number of frames
-    while True:
+    if self._displaying:
       with self._frame_lock:
-        if self.frame_count > frame_count:  # display the frame if it's new ~ might run into issues here?
-          frame_count = self.frame_count
-          self._frame_bytes.seek(0)  # go to the beginning of the buffer
-          Image.fromarray(self.frame).save(self._frame_bytes, 'bmp')
-          yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
+        frame_count = self.frame_count  # get the starting number of frames
+      while self._displaying:
+        with self._frame_lock:
+          if self.frame_count > frame_count:  # display the frame if it's new ~ might run into issues here?
+            frame_count = self.frame_count
+            self._frame_bytes.seek(0)  # go to the beginning of the buffer
+            Image.fromarray(self.frame).save(self._frame_bytes, 'bmp')
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
 
   def run(self):
     while True:
@@ -373,6 +374,23 @@ class Nidaq:
       # if not logging, will we get an error if we do nothing?
       pass
 
+  def display(self, socket):
+    if self._displaying:
+      with self._data_lock:
+        read_count = self.read_count
+      while self._displaying:
+        with self._data_lock:
+
+          if self.read_count > read_count:
+
+            read_count = self.read_count
+            # generate the fft, using numpy?
+            spectrogram = []  # from
+
+            # pass the most recent data to any connected browser
+            socket.emit('fft', {'s': spectrogram})
+            yield
+
   def run(self):
     while True:
       with self._running_lock:
@@ -387,6 +405,8 @@ class Nidaq:
         self.audio.close()
         self.trigger.close()
         self._running = False
+        self._displaying = False
+        self._saving = False
 
   def __del__(self):
     self.stop()
