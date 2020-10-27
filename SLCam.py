@@ -104,6 +104,7 @@ class Camera:
         self.calib = Calib()
 
         self._running = False
+        self._running_lock = threading.Lock()
 
         self._saving = False
         self.file = None
@@ -122,39 +123,39 @@ class Camera:
 
             # we will assume hevc for now
             # will also assume 30fps
-            '''
             self.file = ffmpeg \
                 .input('pipe:', format='rawvideo', pix_fmt='gray', s='1280x1024') \
                 .output(filepath, vcodec='libx265') \
                 .overwrite_output() \
                 .run_async(pipe_stdin=True)
-            '''
-            self.file = cv2.VideoWriter(
-                filepath, cv2.VideoWriter_fourcc(*'hvc1'), 30, (1024, 1280), False)
+            # self.file = cv2.VideoWriter(
+            #     filepath, cv2.VideoWriter_fourcc(*'hvc1'), 30, (1024, 1280), False)
 
         if display:
             self._displaying = True
 
-        if not self._running:
-            self._running = True
-            self._spincam.BeginAcquisition()
+        with self._running_lock:
+            if not self._running:
+                self._running = True
+                self._spincam.BeginAcquisition()
 
     def stop(self):
-        if self._running:
-            if self._saving:
-                self._saving = False
-                # self.file.release()
-                self.file.stdin.close()
-                self.file.wait()
-                del self.file
-                self.file = None
+        with self._running_lock:
+            if self._running:
+                if self._saving:
+                    self._saving = False
+                    # self.file.release()
+                    self.file.stdin.close()
+                    self.file.wait()
+                    del self.file
+                    self.file = None
 
-            cv2.destroyAllWindows()
-            self._running = False
-            self._displaying = False
+                cv2.destroyAllWindows()
+                self._running = False
+                self._displaying = False
 
-            self._spincam.EndAcquisition()
-            self._spincam.DeInit()
+                self._spincam.EndAcquisition()
+                self._spincam.DeInit()
 
     def capture(self):
         im = self._spincam.GetNextImage()
@@ -242,8 +243,7 @@ class Camera:
         return frame
 
     def display(self):
-        cv2.imshow('frame', self.frame)
-        '''
+        # cv2.imshow('frame', self.frame)
         with self._frame_lock:
             frame_count = self.frame_count  # get the starting number of frames
         while True:
@@ -252,12 +252,18 @@ class Camera:
                     frame_count = self.frame_count
                     self._frame_bytes.seek(0)  # go to the beginning of the buffer
                     Image.fromarray(self.frame).save(self._frame_bytes, 'bmp')
-
                     yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
-        '''
 
-    #def __del__(self):
-    #    self.stop()
+    def run(self):
+        while True:
+            with self._running_lock:
+                if self._running:
+                    self.capture()
+                else:
+                    return
+
+    def __del__(self):
+       self.stop()
 
 
 class CameraGroup:
@@ -284,26 +290,26 @@ class CameraGroup:
     def __del__(self):
         for cam in self.cameras:
             cam.stop()
-            # del cam
+            del cam
         self._camlist.Clear()
         self._system.ReleaseInstance()
 
 
-if __name__ == '__main__':
-    board = CharucoBoard()
-    board.save_board()
-    cg = CameraGroup()
-
-    for i, cam in enumerate(cg.cameras):
-        # cam.start(filepath=f'testing{i:02d}.mov')
-        cam.start(display=True)
-
-    for j in range(100):
-        for i, cam in enumerate(cg.cameras):
-            cam.capture()
-    for i, cam in enumerate(cg.cameras):
-        cam.stop()
-
-    del cg
-    #for i, cam in enumerate(cg.cameras):
-    #    cam.stop()
+# if __name__ == '__main__':
+#     board = CharucoBoard()
+#     board.save_board()
+#     cg = CameraGroup()
+#
+#     for i, cam in enumerate(cg.cameras):
+#         # cam.start(filepath=f'testing{i:02d}.mov')
+#         cam.start(display=True)
+#
+#     for j in range(100):
+#         for i, cam in enumerate(cg.cameras):
+#             cam.capture()
+#     for i, cam in enumerate(cg.cameras):
+#         cam.stop()
+#
+#     del cg
+#     for i, cam in enumerate(cg.cameras):
+#        cam.stop()
