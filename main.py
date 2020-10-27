@@ -20,7 +20,7 @@ app = Flask(__name__)
 
 @app.route('/video/<cam_id>')
 def generate_frame(cam_id):
-  return Response(cg.cameras[cam_id].display, mimetype='multipart/x-mixed-replace; boundary=frame')
+  return Response(cg.cameras[cam_id].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/')

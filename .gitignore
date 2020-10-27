@@ -3,3 +3,5 @@ client/node_modules
 server/static/react
 
 server/templates/index.html
+
+*.pyc
