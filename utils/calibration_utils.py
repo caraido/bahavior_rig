@@ -4,9 +4,30 @@ import itertools
 from time import time
 
 
+def get_calib_param():
+    params = cv2.aruco.DetectorParameters_create()
+    params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_CONTOUR
+    params.adaptiveThreshWinSizeMin = 100
+    params.adaptiveThreshWinSizeMax = 700
+    params.adaptiveThreshWinSizeStep = 50
+    params.adaptiveThreshConstant = 5
+    return params
+
+
 def get_expected_corners(board):
     board_size = board.getChessboardSize()
     return (board_size[0] - 1) * (board_size[1] - 1)
+
+
+def check_aligned(id, corner, trueids, truecorners, CI):
+    for trueid in trueids:
+        pass # TODO
+
+    aligned = [True if tcor+CI>cor>np.maximum(tcor-CI,0) else False for cor, tcor in zip(corners,truecorners) ]
+    if all(aligned):
+        return 255
+    else:
+        return 0
 
 
 def trim_corners(allCorners, allIds, maxBoards=85):
@@ -86,3 +107,6 @@ def quick_calibrate(someCorners, someIds, board, width, height):
 
     calib_params = quick_calibrate_charuco(allCorners, allIds, board, width, height)
     return calib_params
+
+def ex_alignment():
+    pass
