@@ -11,6 +11,7 @@ import threading
 from io import BytesIO
 from PIL import Image
 import nidaqmx
+from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 
 
 class CharucoBoard:
@@ -415,7 +416,7 @@ class Nidaq:
 
         if display:
           self._displaying = True
-          self._audio_reader = nidaqmx.stream_readers.AnalogSingleChannelReader(
+          self._audio_reader = AnalogReader(
               self.audio.in_stream)
           self._read_size = self.sample_rate // self.read_rate
 
