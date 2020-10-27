@@ -29,9 +29,9 @@ app = Flask(__name__)
 def stop_running():
   cg.cameras[0].stop()
 
-@app.route('/video/<cam_id>')
+@app.route('/video/<int:cam_id>')
 def generate_frame(cam_id):
-  return Response(cg.cameras[int(cam_id)].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
+  return Response(cg.cameras[cam_id].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/')
