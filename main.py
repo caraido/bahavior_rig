@@ -6,10 +6,13 @@ from flask import Flask, Response, render_template
 cg = SLCam.CameraGroup()
 
 # this section is a placeholder
-# we will want to use the GUI to
-cg.start(filepaths=['C:\\Users\\SchwartzLab\\Desktop\\Testing.mov'],isDisplayed=[True])
-grabber = threading.Thread(target = cg.cameras[0].run)
-grabber.start()
+# we will want to use the GUI to manage these settings
+cg.start(
+    filepaths=['C:\\Users\\SchwartzLab\\Desktop\\Testing.mov'], isDisplayed=[True])
+
+# run collection in the background -- this should ultimately be initiated by a gui button
+grabber = threading.Thread(target=cg.cameras[0].run)
+grabber.start() #will run until the stop() method is called
 
 
 app = Flask(__name__)
@@ -24,10 +27,11 @@ app = Flask(__name__)
 #   if request.method == 'POST':
 #     api_switch.get(request.form['action'])()
 
-#this is a placeholder, mimicking a post request using a get request
+# this is a placeholder, mimicking a post request using a get request
 @app.route('/api/stop')
 def stop_running():
   cg.cameras[0].stop()
+
 
 @app.route('/video/<int:cam_id>')
 def generate_frame(cam_id):
