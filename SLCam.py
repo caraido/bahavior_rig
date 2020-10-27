@@ -98,7 +98,7 @@ class Calib:
     for item in items:
       if camera_serial_number in item and self.type in item:
         path = self.load_path+'config_' + self.type + \
-          '_' + camera_serial_number + '.toml'
+            '_' + camera_serial_number + '.toml'
         with open(path, 'r') as f:
           # there only should be only one calib file for each camera
           self.config = toml.load(f)
@@ -216,23 +216,23 @@ class Camera:
     if self._saving:
       self.save(frame)
 
-       # press "i" or "e" key to turn on or off calibration mode
-       if cv2.waitKey(1) & 0xFF == ord('c'):
-          self.extrinsic_calibration_switch()
-        if cv2.waitKey(1) & 0xFF == ord('i'):
-          self.intrinsic_calibration_switch()
+    # press "i" or "e" key to turn on or off calibration mode
+    if cv2.waitKey(1) & 0xFF == ord('c'):
+      self.extrinsic_calibration_switch()
+    if cv2.waitKey(1) & 0xFF == ord('i'):
+      self.intrinsic_calibration_switch()
 
-        # check calibration status
-        if self._in_calibrating and self._ex_calibrating:
-          raise Warning('Only one type of calibration can be turned on!')
+    # check calibration status
+    if self._in_calibrating and self._ex_calibrating:
+      raise Warning('Only one type of calibration can be turned on!')
 
-        # intrinsic calibration
-        if self._in_calibrating and not self._ex_calibrating:
-          self.intrinsic_calibration(frame)
+    # intrinsic calibration
+    if self._in_calibrating and not self._ex_calibrating:
+      self.intrinsic_calibration(frame)
 
-        # extrinsic calibration
-        if self._ex_calibrating and not self._in_calibrating:
-          self.extrinsic_calibration(frame)
+    # extrinsic calibration
+    if self._ex_calibrating and not self._in_calibrating:
+      self.extrinsic_calibration(frame)
 
     if self._displaying:
       # acquire lock on frame
@@ -283,7 +283,8 @@ class Camera:
   def intrinsic_calibration(self, frame):
     # write something on the frame
     text = 'Intrinsic calibration mode On'
-    cv2.putText(frame, text, (50, 50), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 125), 2)
+    cv2.putText(frame, text, (50, 50),
+                cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 125), 2)
 
     # key step: detect markers
     params = cv2.aruco.DetectorParameters_create()
@@ -325,7 +326,7 @@ class Camera:
             self._frame_bytes.seek(0)  # go to the beginning of the buffer
             Image.fromarray(self.frame).save(self._frame_bytes, 'bmp')
             yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
-    
+
   def extrinsic_calibration(self, frame):
     if self.ex_calib.config is None:
       text = 'No configuration file found. Performing initial extrinsic calibration... '
@@ -359,7 +360,7 @@ class Camera:
       # check if aligned:
 
       for id, corner in zip(ids, corners):
-        color = cau.check_aligned(id, corner, trueids, truecorners,CI)
+        color = cau.check_aligned(id, corner, trueids, truecorners, CI)
         cv2.rectangle(frame, truecorners[i]
                       [0], truecorners[i][[2]], color, 5)
 
