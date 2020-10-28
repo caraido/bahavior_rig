@@ -363,17 +363,24 @@ class Camera:
           frame, self.ex_calib.board.dictionary, parameters=params)
       cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
 
-      # check if aligned:
+      truecorners_dict = dict(zip(trueids, truecorners))
 
-      for id, corner in zip(ids, corners):
-        color = cau.check_aligned(id, corner, trueids, truecorners, CI)
-        cv2.rectangle(frame, truecorners[i]
-                      [0], truecorners[i][[2]], color, 5)
+      aligns = []
+      # check if aligned:
+      for idf, corner in zip(ids, corners):
+        color, align = cau.check_aligned(idf, corner, truecorners_dict, CI)
+        aligns.append(aligns)
+        cv2.rectangle(frame, truecorners_dict[idf][0], truecorners_dict[idf][[2]], color, 5)
+
+      if all(aligns):
+        text = 'All corners aligned'
+        cv2.putText(frame, text, (100, 0), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+
 
   def run(self):
     last = 0
     # we will wait a bit less than the interval between frames
-    interval = (1 / self.read_rate) - BUFFER_TIME
+    interval = (1 / self.frame_rate) - BUFFER_TIME
     while True:
       time.sleep(max(last + interval - time.time(), 0))
       with self._running_lock:
@@ -381,7 +388,7 @@ class Camera:
           last = time.time()
           self.capture()
         else:
-          return
+          return 0 # TODO
 
   def __del__(self):
     self.stop()
@@ -430,7 +437,7 @@ class Nidaq:
               self.audio.in_stream)
           self._read_size = self.sample_rate // self.read_rate
 
-          self.data = np.ndarray(shape=(1, self._read_size))
+          self.data = np.ndarray(shape=(self._read_size))
 
           log_mode = nidaqmx.constants.LoggingMode.LOG_AND_READ
 
@@ -488,7 +495,7 @@ class Nidaq:
       # if not logging, will we get an error if we do nothing?
       pass
 
-  def display(self, socket):
+  def display(self, socket=None):
     '''
     Calculate the spectrogram of the data and send to connected browsers.
     There are many ways to approach this, in particular by using wavelets or by using
@@ -505,10 +512,11 @@ class Nidaq:
 
             read_count = self.read_count
             # generate the fft, using numpy?
-            spectrogram = np.fft.fftshift(np.fft(self.data))
+            spectrogram = abs(np.fft.fftshift(np.fft.fft(self.data)))
+            #we certainly don't need to display so many frequency points
 
             # pass the most recent data to any connected browser
-            socket.emit('fft', {'s': spectrogram})
+            socket.emit('fft', {'s': spectrogram.tolist()})
 
   def run(self):
     last = 0
