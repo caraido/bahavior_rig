@@ -8,8 +8,14 @@ let main = () => {
   //do socketio connection
   let socket = io();
   socket.on("connect", () => console.log('connected'));
-  socket.on("settings", (data) => console.log(data));
-  socket.on("fft", (data) => console.log(data));
+  socket.on("settings", data => {
+    spectrum.setCenterHz(data.center);
+    spectrum.setSpanHz(data.fs);
+  });
+  socket.on("fft", data => {
+    spectrum.addData(data.s);
+    console.log('data received');
+  });
 
 };
 
