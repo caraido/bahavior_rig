@@ -11,6 +11,9 @@ import threading
 from io import BytesIO
 from PIL import Image
 import nidaqmx
+import time
+
+BUFFER_TIME = .005  # time in seconds allowed for overhead
 
 
 class CharucoBoard:
@@ -129,7 +132,7 @@ class Calib:
 
 class Camera:
 
-  def __init__(self, camlist, index):
+  def __init__(self, camlist, index, frame_rate):
     self._spincam = camlist.GetByIndex(index)
     self._spincam.Init()
 
@@ -139,6 +142,8 @@ class Camera:
     self._spincam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
     self._spincam.TriggerSource.SetValue(PySpin.TriggerSource_Line0)
     self._spincam.TriggerMode.SetValue(PySpin.TriggerMode_On)
+
+    self.frame_rate = frame_rate
 
     self.device_serial_number, self.height, self.width = self.get_camera_property()
     self.in_calib = Calib('intrinsic')
@@ -365,9 +370,14 @@ class Camera:
                       [0], truecorners[i][[2]], color, 5)
 
   def run(self):
+    last = 0
+    # we will wait a bit less than the interval between frames
+    interval = (1 / self.read_rate) - BUFFER_TIME
     while True:
+      time.sleep(max(last + interval - time.time(), 0))
       with self._running_lock:
         if self._running:
+          last = time.time()
           self.capture()
         else:
           return
@@ -377,14 +387,14 @@ class Camera:
 
 
 class Nidaq:
-  def __init__(self):
+  def __init__(self, frame_rate, audio_rate):
     self.audio = None
     self.trigger = None
     self._audio_reader = None
     self.data = None
 
-    self.sample_rate = int(3e5)
-    self.trigger_freq = 30
+    self.sample_rate = audio_rate
+    self.trigger_freq = frame_rate
     self.duty_cycle = .01
     self.read_rate = 10  # minimum recommended by NI
     self._read_size = self.sample_rate // self.read_rate
@@ -465,6 +475,7 @@ class Nidaq:
   def capture(self):
     if self._displaying:
       # we will save the samples to self.data
+
       with self._data_lock:
         self._audio_reader.read_many_sample(
             self.data,
@@ -477,6 +488,11 @@ class Nidaq:
       pass
 
   def display(self, socket):
+    '''
+    Calculate the spectrogram of the data and send to connected browsers.
+    There are many ways to approach this, in particular by using wavelets or by using
+    overlapping FFTs. For now just trying non-overlapping FFTs ~ the simplest approach.
+    '''
     if self._displaying:
       with self._data_lock:
         read_count = self.read_count
@@ -484,19 +500,24 @@ class Nidaq:
         with self._data_lock:
 
           if self.read_count > read_count:
+            # note that we're not guaranteed to be gathering sequential reads...
 
             read_count = self.read_count
             # generate the fft, using numpy?
-            spectrogram = []  # from
+            spectrogram = np.fft.fftshift(np.fft(self.data))
 
             # pass the most recent data to any connected browser
             socket.emit('fft', {'s': spectrogram})
-            yield
 
   def run(self):
+    last = 0
+    # we will wait a bit less than the interval between frames
+    interval = (1 / self.read_rate) - BUFFER_TIME
     while True:
+      time.sleep(max(last + interval - time.time(), 0))
       with self._running_lock:
         if self._running:
+          last = time.time()
           self.capture()
         else:
           return
@@ -515,13 +536,13 @@ class Nidaq:
 
 
 class AcquisitionGroup:
-  def __init__(self):
+  def __init__(self, frame_rate=30, audio_rate=int(3e5)):
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
     self.nCameras = self._camlist.GetSize()
-    self.cameras = [Camera(self._camlist, i)
+    self.cameras = [Camera(self._camlist, i, frame_rate)
                     for i in range(self.nCameras)]
-    self.nidaq = Nidaq()
+    self.nidaq = Nidaq(frame_rate, audio_rate)
 
     self._runners = [threading.Thread(
         target=cam.run) for cam in self.cameras] + [threading.Thread(target=self.nidaq.run)]

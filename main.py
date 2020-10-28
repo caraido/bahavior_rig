@@ -6,7 +6,7 @@ from flask_socketio import SocketIO, emit
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='threading')
 
-ag = SLCam.AcquisitionGroup()
+ag = SLCam.AcquisitionGroup(frame_rate=30, audio_rate = int(3e5))
 
 # this section is a placeholder
 # we will want to use the GUI to manage these settings
@@ -41,7 +41,6 @@ def connected():
 def stop_running():
   ag.stop()
   socketio.emit('stopped')
-
 
 
 @app.route('/video/calibration')
