@@ -331,10 +331,11 @@ class Camera:
                 frame, self.ex_calib.board.dictionary, parameters=params)
             cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
 
-            # check if aligned:
+            truecorners_dict = dict(zip(trueids, truecorners))
 
-            for id, corner in zip(ids, corners):
-                color = cau.check_aligned(id, corner, trueids,truecorners,CI)
+            # check if aligned:
+            for idf, corner in zip(ids, corners):
+                color = cau.check_aligned(idf, corner, truecorners_dict, CI)
                 cv2.rectangle(frame, truecorners[i][0], truecorners[i][[2]], color, 5)
 
     def display(self):
@@ -360,7 +361,7 @@ class Camera:
                     return
 
     def __del__(self):
-       self.stop()
+        self.stop()
 
 
 class CameraGroup:

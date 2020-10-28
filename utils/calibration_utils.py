@@ -19,11 +19,10 @@ def get_expected_corners(board):
     return (board_size[0] - 1) * (board_size[1] - 1)
 
 
-def check_aligned(id, corner, trueids, truecorners, CI):
-    for trueid in trueids:
-        pass # TODO
+def check_aligned(idf, corner, truecorners_dict, CI):
+    truecorner = truecorners_dict[str(idf)]
 
-    aligned = [True if tcor+CI>cor>np.maximum(tcor-CI,0) else False for cor, tcor in zip(corners,truecorners) ]
+    aligned = [True if tcor+CI>cor>np.maximum(tcor-CI, 0) else False for cor, tcor in zip(corner,truecorner) ]
     if all(aligned):
         return 255
     else:
