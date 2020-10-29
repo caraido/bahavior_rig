@@ -1,6 +1,7 @@
 import cv2
 import PySpin
 import numpy as np
+from scipy import signal
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import ffmpeg
@@ -15,7 +16,6 @@ from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 import time
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
-
 
 class CharucoBoard:
   def __init__(self, x, y, marker_size=0.8):
@@ -171,6 +171,7 @@ class Camera:
 
       # we will assume hevc for now
       # will also assume 30fps
+      # '1280x1024' can be replaced by self.width and self.height
       self.file = ffmpeg \
           .input('pipe:', format='rawvideo', pix_fmt='gray', s='1280x1024') \
           .output(filepath, vcodec='libx265') \
@@ -202,16 +203,19 @@ class Camera:
           self.file.wait()
           del self.file
           self.file = None
-
-        cv2.destroyAllWindows()
+        # cv2.destroyAllWindows() #this appears to be causing errors?
         self._running = False
         self._displaying = False
 
         self._spincam.EndAcquisition()
         self._spincam.DeInit()
 
+        print(f'stopped camera {self.device_serial_number}')
+
   def capture(self):
-    im = self._spincam.GetNextImage()
+    im = self._spincam.GetNextImage() #can we set a timeout here? don't want to infinitely hang if there's an issue
+
+
     # parse to make sure that image is complete....
     if im.IsIncomplete():
       status = im.GetImageStatus()
@@ -223,10 +227,10 @@ class Camera:
       self.save(frame)
 
     # press "i" or "e" key to turn on or off calibration mode
-    if cv2.waitKey(1) & 0xFF == ord('c'):
-      self.extrinsic_calibration_switch()
-    if cv2.waitKey(1) & 0xFF == ord('i'):
-      self.intrinsic_calibration_switch()
+    # if cv2.waitKey(1) & 0xFF == ord('c'):
+    #   self.extrinsic_calibration_switch()
+    # if cv2.waitKey(1) & 0xFF == ord('i'):
+    #   self.intrinsic_calibration_switch()
 
     # check calibration status
     if self._in_calibrating and self._ex_calibrating:
@@ -245,7 +249,7 @@ class Camera:
       with self._frame_lock:
         self.frame = frame
         self.frame_count += 1
-      # self.display()
+        # self.display()
 
     im.Release()
 
@@ -373,22 +377,28 @@ class Camera:
         cv2.rectangle(frame, truecorners_dict[idf][0], truecorners_dict[idf][[2]], color, 5)
 
       if all(aligns):
-        text = 'All corners aligned'
+        text = 'All corners aligned!'
         cv2.putText(frame, text, (100, 0), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
-
   def run(self):
+    flag = False
     last = 0
     # we will wait a bit less than the interval between frames
     interval = (1 / self.frame_rate) - BUFFER_TIME
     while True:
-      time.sleep(max(last + interval - time.time(), 0))
+      pause_time = last + interval - time.time()
+      if pause_time > 0:
+        time.sleep(pause_time)
       with self._running_lock:
         if self._running:
           last = time.time()
           self.capture()
         else:
-          return 0 # TODO
+          flag = True
+      if flag:
+        return
+
+
 
   def __del__(self):
     self.stop()
@@ -400,11 +410,12 @@ class Nidaq:
     self.trigger = None
     self._audio_reader = None
     self.data = None
+    self._nBuffers = 10
 
     self.sample_rate = audio_rate
     self.trigger_freq = frame_rate
     self.duty_cycle = .01
-    self.read_rate = 10  # minimum recommended by NI
+    self.read_rate = 1  # in Hz, depends on PC buffer size...
     self._read_size = self.sample_rate // self.read_rate
     self.read_count = 0
 
@@ -425,6 +436,8 @@ class Nidaq:
         self.audio.timing.cfg_samp_clk_timing(
             self.sample_rate, sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS
         )
+        self.audio.in_stream.input_buf_size = self.sample_rate * 60 #buffer on PC in seconds
+
         self.audio.control(
             nidaqmx.constants.TaskMode.TASK_COMMIT
         )  # transition the task to the committed state so it's ready to start
@@ -437,7 +450,7 @@ class Nidaq:
               self.audio.in_stream)
           self._read_size = self.sample_rate // self.read_rate
 
-          self.data = np.ndarray(shape=(self._read_size))
+          self.data = [np.ndarray(shape=(self._read_size)) for i in range(self._nBuffers)]
 
           log_mode = nidaqmx.constants.LoggingMode.LOG_AND_READ
 
@@ -453,7 +466,9 @@ class Nidaq:
         if filepath:
           self._saving = True
           self.audio.in_stream.configure_logging(
-              filepath, logging_mode=log_mode)  # see nptdms
+              filepath,
+            logging_mode=log_mode,
+            operation=nidaqmx.constants.LoggingOperation.CREATE_OR_REPLACE)  # see nptdms
         else:
           self._saving = False
           self.audio.in_stream.configure_logging(
@@ -480,16 +495,18 @@ class Nidaq:
 
         self._running = True
 
-  def capture(self):
+  def capture(self, read_count):
     if self._displaying:
       # we will save the samples to self.data
 
+      self._audio_reader.read_many_sample(
+          self.data[self.read_count % self._nBuffers], #modulo implements a circular buffer
+          number_of_samples_per_channel=self._read_size
+      )
+
       with self._data_lock:
-        self._audio_reader.read_many_sample(
-            self.data,
-            number_of_samples_per_channel=self._read_size
-        )
         self.read_count += 1
+
     else:
       # not sure... if we're logging, then we do nothing
       # if not logging, will we get an error if we do nothing?
@@ -501,33 +518,62 @@ class Nidaq:
     There are many ways to approach this, in particular by using wavelets or by using
     overlapping FFTs. For now just trying non-overlapping FFTs ~ the simplest approach.
     '''
+    flag = False
     if self._displaying:
       with self._data_lock:
-        read_count = self.read_count
-      while self._displaying:
-        with self._data_lock:
+        read_count = max(self.read_count - 1, 0)
 
+      while self._displaying:
+
+        last = 0
+        # we will wait a bit less than the interval between frames
+        interval = (1 / self.read_rate) - BUFFER_TIME
+
+        pause_time = last + interval - time.time()
+        if pause_time > 0:
+          time.sleep(pause_time)
+
+        with self._data_lock:
           if self.read_count > read_count:
             # note that we're not guaranteed to be gathering sequential reads...
 
             read_count = self.read_count
-            # generate the fft, using numpy?
-            spectrogram = abs(np.fft.fftshift(np.fft.fft(self.data)))
-            #we certainly don't need to display so many frequency points
+            flag = True
 
-            # pass the most recent data to any connected browser
-            socket.emit('fft', {'s': spectrogram.tolist()})
+        if flag:
+          # generate the fft, using numpy?
+
+          #is the gain too high?
+          spectrogram = signal.resample(
+            abs(np.fft.fftshift(np.fft.fft(self.data[(self.read_count-1) % self._nBuffers])))
+          , 1000)
+          # print(f'spectrogram range: {min(spectrogram)} to {max(spectrogram)}')
+          # here we get the latest self.data buffer
+
+          # pass the most recent data to any connected browser
+          socket.emit('fft', {'s': spectrogram.tolist()})
+          #downsample the fft by a lot... better ways to do this, but can't handle so much data
+
+          flag = False
 
   def run(self):
-    last = 0
+    # last = 0
     # we will wait a bit less than the interval between frames
-    interval = (1 / self.read_rate) - BUFFER_TIME
+    # interval = (1 / self.read_rate) - BUFFER_TIME
+    # print(f'nidaq interval = {interval}')
+    with self._data_lock:
+      read_count = self.read_count
+
     while True:
-      time.sleep(max(last + interval - time.time(), 0))
+      # pause_time = last + interval - time.time()
+      # if pause_time > 0:
+      #   time.sleep(pause_time)
+      time.sleep(BUFFER_TIME) #this allows other threads to capture lock in interim
       with self._running_lock:
         if self._running:
           last = time.time()
-          self.capture()
+          self.capture(read_count)
+          read_count += 1
         else:
           return
 
@@ -539,6 +585,7 @@ class Nidaq:
         self._running = False
         self._displaying = False
         self._saving = False
+        print('stopped nidaq')
 
   def __del__(self):
     self.stop()
@@ -574,9 +621,9 @@ class AcquisitionGroup:
       runner.start()
 
   def stop(self):
-    self.nidaq.stop()
     for cam in self.cameras:
       cam.stop()
+    self.nidaq.stop() #make sure cameras are stopped before stopping triggers
 
   def __del__(self):
     for cam in self.cameras:
@@ -586,10 +633,15 @@ class AcquisitionGroup:
     self._system.ReleaseInstance()
     del self.nidaq
 
+if __name__ == '__main__':
+  ag = AcquisitionGroup()
+  ag.start(isDisplayed=[True,False])
+  ag.run()
+
 # if __name__ == '__main__':
 #      board = CharucoBoard(6,2)
 #      #board.save_board(2000)
-#      cg = CameraGroup()
+#      cg = AcquisitionGroup()
 #
 #      for i, cam in enumerate(cg.cameras):
 #          # cam.start(filepath=f'testing{i:02d}.mov')
@@ -602,5 +654,5 @@ class AcquisitionGroup:
 #          cam.stop()
 #
 #      del cg
-#     for i, cam in enumerate(cg.cameras):
-#        cam.stop()
+#     #for i, cam in enumerate(cg.cameras):
+#     #   cam.stop()
