@@ -354,6 +354,7 @@ Spectrum.prototype.toggleFullscreen = function () {
 }
 
 Spectrum.prototype.onKeypress = function (e) {
+  console.log('registered keypress:', e.key)
   if (e.key == " ") {
     this.togglePaused();
   } else if (e.key == "f") {
