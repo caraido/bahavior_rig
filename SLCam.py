@@ -521,6 +521,7 @@ class Nidaq:
       pass
 
   def display(self, socket=None):
+    print('display loop')
     '''
     Calculate the spectrogram of the data and send to connected browsers.
     There are many ways to approach this, in particular by using wavelets or by using
@@ -559,6 +560,7 @@ class Nidaq:
           #     abs(np.fft.fftshift(np.fft.fft(self.data[(self.read_count-1) % self._nBuffers]))), self._nfft)
 
           # pass the most recent data to any connected browser
+          print('emitting fft')
           socket.emit('fft', {'s': signal.resample(
               spectrogram, self._nfft, axis=0).flatten().tolist()})
           # downsample the fft by a lot... better ways to do this, but can't handle so much data
