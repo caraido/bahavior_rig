@@ -6,17 +6,22 @@ from flask_socketio import SocketIO, emit
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='threading')
 
-ag = SLCam.AcquisitionGroup(frame_rate=30, audio_rate = int(3e5))
-
+ag = SLCam.AcquisitionGroup(frame_rate=30, audio_rate=int(3e5))
 # this section is a placeholder
 # we will want to use the GUI to manage these settings
+#ag.start(
+#    filepaths=[f'C:\\Users\\SchwartzLab\\Desktop\\Testing{i}.mov' for i in range(len(ag.cameras))] + ['C:\\Users\\SchwartzLab\\Desktop\\Testing.tdms'],
+#    isDisplayed=[True] + [False]*(len(ag.cameras)-1) + [True])
+
+# display camera without saving
 ag.start(
-    filepaths=['C:\\Users\\SchwartzLab\\Desktop\\Testing.mov', 'C:\\Users\\SchwartzLab\\Desktop\\Testing.tdms'], isDisplayed=[True, True])
+    filepaths=None,
+    isDisplayed=[True] + [False]*(len(ag.cameras)-1) + [False])
 
 # run collection in the background -- this should ultimately be initiated by a gui button
 ag.run()
 
-emitter = threading.Thread(target=ag.nidaq.display, args=(socketio))
+emitter = threading.Thread(target=ag.nidaq.display, kwargs={'socket':socketio})
 emitter.start()
 
 # api_switch = {
@@ -33,31 +38,38 @@ emitter.start()
 
 @socketio.on('connect')
 def connected():
-  emit('settings', {'center': 0, 'fs': ag.nidaq.sample_rate})
-  # don't actually know what center should be...
+    emit('settings', {'center': 0, 'fs': ag.nidaq.sample_rate})
+    # don't actually know what center should be...
 
 
 @app.route('/api/stop')
 def stop_running():
-  ag.stop()
-  socketio.emit('stopped')
+    ag.stop()
+    socketio.emit('stopped')
 
 
-@app.route('/video/calibration')
-def calibration_switch():
-  cg.cameras[0].calibration_switch()
+@app.route('/video/ex-calibration')
+def ex_calibration_switch():
+    ag.cameras[0].extrinsic_calibration_switch()
+    return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+@app.route('/video/in-calibration')
+def in_calibration_switch():
+    ag.cameras[0].intrinsic_calibration_switch()
+    return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/video/<int:cam_id>')
 def generate_frame(cam_id):
-  return Response(ag.cameras[cam_id].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    return Response(ag.cameras[cam_id].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/')
 def index():
-  return render_template('index.html')
+    return render_template('index.html')
 
 
 if __name__ == '__main__':
-  socketio.run(app, host='127.0.0.1', port=3001,
+    socketio.run(app, host='127.0.0.1', port=3001,
                debug=True, use_reloader=False)
