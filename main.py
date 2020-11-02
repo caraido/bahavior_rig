@@ -4,7 +4,7 @@ from flask import Flask, Response, render_template
 from flask_socketio import SocketIO, emit
 
 audio_settings = {
-    'fs': 3e5,  # sample rate
+    'fs': int(3e5),  # sample rate
     'nFreq': 1e2,  # number of frequency values to send
     'fScale': 'log',  # frequency spacing, linear or log
     'window': .01,  # length of window in seconds
