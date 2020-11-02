@@ -11,7 +11,7 @@ audio_settings = {
     'overlap': .5,  # fractional overlap
 }
 app = Flask(__name__)
-socketio = SocketIO(app, async_mode='threading')
+socketio = SocketIO(app, async_mode='threading', cors_allowed_origins=[])
 
 ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 
@@ -44,7 +44,7 @@ emitter.start()
 
 @socketio.on('connect')
 def connected():
-  emit('settings', settings)
+  emit('settings', audio_settings)
   # don't actually know what center should be...
 
 
