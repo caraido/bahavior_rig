@@ -602,7 +602,7 @@ class Nidaq:
 
 
 class AcquisitionGroup:
-  def __init__(self, frame_rate=30, audio_settings):
+  def __init__(self, frame_rate=30, audio_settings=None):
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
     self.nCameras = self._camlist.GetSize()
