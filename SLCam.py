@@ -413,7 +413,7 @@ class Nidaq:
     self.data = None
     self._nBuffers = 10
 
-    self.sample_rate = audio_settings.fs
+    self.sample_rate = audio_settings['fs']
     self.trigger_freq = frame_rate
     self.duty_cycle = .01
     self.read_rate = 1  # in Hz, depends on PC buffer size...
@@ -426,9 +426,9 @@ class Nidaq:
     self._data_lock = threading.Lock()
     self._saving = False
 
-    self._nfft = audio_settings.nFreq
-    self._window = audio_settings.window * self.sample_rate
-    self._overlap = audio_settings.overlap * self._window
+    self._nfft = audio_settings['nFreq']
+    self._window = audio_settings['window'] * self.sample_rate
+    self._overlap = audio_settings['overlap'] * self._window
 
   def start(self, filepath=None, display=False):
     with self._running_lock:
