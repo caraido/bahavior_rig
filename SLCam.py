@@ -17,6 +17,7 @@ import time
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 
+
 class CharucoBoard:
   def __init__(self, x, y, marker_size=0.8):
     self.x = x
@@ -213,8 +214,8 @@ class Camera:
         print(f'stopped camera {self.device_serial_number}')
 
   def capture(self):
-    im = self._spincam.GetNextImage() #can we set a timeout here? don't want to infinitely hang if there's an issue
-
+    # can we set a timeout here? don't want to infinitely hang if there's an issue
+    im = self._spincam.GetNextImage()
 
     # parse to make sure that image is complete....
     if im.IsIncomplete():
@@ -374,11 +375,13 @@ class Camera:
       for idf, corner in zip(ids, corners):
         color, align = cau.check_aligned(idf, corner, truecorners_dict, CI)
         aligns.append(aligns)
-        cv2.rectangle(frame, truecorners_dict[idf][0], truecorners_dict[idf][[2]], color, 5)
+        cv2.rectangle(
+            frame, truecorners_dict[idf][0], truecorners_dict[idf][[2]], color, 5)
 
       if all(aligns):
         text = 'All corners aligned!'
-        cv2.putText(frame, text, (100, 0), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+        cv2.putText(frame, text, (100, 0),
+                    cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
   def run(self):
     flag = False
@@ -398,21 +401,19 @@ class Camera:
       if flag:
         return
 
-
-
   def __del__(self):
     self.stop()
 
 
 class Nidaq:
-  def __init__(self, frame_rate, audio_rate):
+  def __init__(self, frame_rate, audio_settings):
     self.audio = None
     self.trigger = None
     self._audio_reader = None
     self.data = None
     self._nBuffers = 10
 
-    self.sample_rate = audio_rate
+    self.sample_rate = audio_settings.fs
     self.trigger_freq = frame_rate
     self.duty_cycle = .01
     self.read_rate = 1  # in Hz, depends on PC buffer size...
@@ -425,6 +426,10 @@ class Nidaq:
     self._data_lock = threading.Lock()
     self._saving = False
 
+    self._nfft = audio_settings.nFreq
+    self._window = audio_settings.window * self.sample_rate
+    self._overlap = audio_settings.overlap * self._window
+
   def start(self, filepath=None, display=False):
     with self._running_lock:
       if not self._running:
@@ -436,7 +441,8 @@ class Nidaq:
         self.audio.timing.cfg_samp_clk_timing(
             self.sample_rate, sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS
         )
-        self.audio.in_stream.input_buf_size = self.sample_rate * 60 #buffer on PC in seconds
+        self.audio.in_stream.input_buf_size = self.sample_rate * \
+            60  # buffer on PC in seconds
 
         self.audio.control(
             nidaqmx.constants.TaskMode.TASK_COMMIT
@@ -450,7 +456,8 @@ class Nidaq:
               self.audio.in_stream)
           self._read_size = self.sample_rate // self.read_rate
 
-          self.data = [np.ndarray(shape=(self._read_size)) for i in range(self._nBuffers)]
+          self.data = [np.ndarray(shape=(self._read_size))
+                       for i in range(self._nBuffers)]
 
           log_mode = nidaqmx.constants.LoggingMode.LOG_AND_READ
 
@@ -467,8 +474,8 @@ class Nidaq:
           self._saving = True
           self.audio.in_stream.configure_logging(
               filepath,
-            logging_mode=log_mode,
-            operation=nidaqmx.constants.LoggingOperation.CREATE_OR_REPLACE)  # see nptdms
+              logging_mode=log_mode,
+              operation=nidaqmx.constants.LoggingOperation.CREATE_OR_REPLACE)  # see nptdms
         else:
           self._saving = False
           self.audio.in_stream.configure_logging(
@@ -500,7 +507,8 @@ class Nidaq:
       # we will save the samples to self.data
 
       self._audio_reader.read_many_sample(
-          self.data[self.read_count % self._nBuffers], #modulo implements a circular buffer
+          # modulo implements a circular buffer
+          self.data[self.read_count % self._nBuffers],
           number_of_samples_per_channel=self._read_size
       )
 
@@ -541,18 +549,19 @@ class Nidaq:
             flag = True
 
         if flag:
-          # generate the fft, using numpy?
+          # we ought to extend the sampled data range so that the tails of the spectrogram are accurate with the desired overlap
 
-          #is the gain too high?
-          spectrogram = signal.resample(
-            abs(np.fft.fftshift(np.fft.fft(self.data[(self.read_count-1) % self._nBuffers])))
-          , 1000)
-          # print(f'spectrogram range: {min(spectrogram)} to {max(spectrogram)}')
-          # here we get the latest self.data buffer
+          _, _, spectrogram = signal.spectrogram(self.data[(
+              self.read_count-1) % self._nBuffers], self.sample_rate, nperseg=self._window, noverlap=self._overlap)
+
+          # # is the gain too high?
+          # spectrogram = signal.resample(
+          #     abs(np.fft.fftshift(np.fft.fft(self.data[(self.read_count-1) % self._nBuffers]))), self._nfft)
 
           # pass the most recent data to any connected browser
-          socket.emit('fft', {'s': spectrogram.tolist()})
-          #downsample the fft by a lot... better ways to do this, but can't handle so much data
+          socket.emit('fft', {'s': signal.resample(
+              spectrogram, self._nfft, axis=0).flatten().tolist()})
+          # downsample the fft by a lot... better ways to do this, but can't handle so much data
 
           flag = False
 
@@ -568,7 +577,8 @@ class Nidaq:
       # pause_time = last + interval - time.time()
       # if pause_time > 0:
       #   time.sleep(pause_time)
-      time.sleep(BUFFER_TIME) #this allows other threads to capture lock in interim
+      # this allows other threads to capture lock in interim
+      time.sleep(BUFFER_TIME)
       with self._running_lock:
         if self._running:
           last = time.time()
@@ -592,13 +602,13 @@ class Nidaq:
 
 
 class AcquisitionGroup:
-  def __init__(self, frame_rate=30, audio_rate=int(3e5)):
+  def __init__(self, frame_rate=30, audio_settings):
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
     self.nCameras = self._camlist.GetSize()
     self.cameras = [Camera(self._camlist, i, frame_rate)
                     for i in range(self.nCameras)]
-    self.nidaq = Nidaq(frame_rate, audio_rate)
+    self.nidaq = Nidaq(frame_rate, audio_settings)
 
     self._runners = [threading.Thread(
         target=cam.run) for cam in self.cameras] + [threading.Thread(target=self.nidaq.run)]
@@ -609,7 +619,7 @@ class AcquisitionGroup:
     if not isDisplayed:
       isDisplayed = [False] * (self.nCameras + 1)
 
-    for cam, fp, disp in zip(self.cameras, filepaths[:-1], isDisplayed[:-1]):
+    for cam, fp, disp in zip(self.cameras, filepaths[: -1], isDisplayed[: -1]):
       cam.start(filepath=fp, display=disp)
 
     # once the camera BeginAcquisition methods are called, we can start triggering
@@ -623,7 +633,7 @@ class AcquisitionGroup:
   def stop(self):
     for cam in self.cameras:
       cam.stop()
-    self.nidaq.stop() #make sure cameras are stopped before stopping triggers
+    self.nidaq.stop()  # make sure cameras are stopped before stopping triggers
 
   def __del__(self):
     for cam in self.cameras:
@@ -633,9 +643,10 @@ class AcquisitionGroup:
     self._system.ReleaseInstance()
     del self.nidaq
 
+
 if __name__ == '__main__':
   ag = AcquisitionGroup()
-  ag.start(isDisplayed=[True,False])
+  ag.start(isDisplayed=[True, False])
   ag.run()
 
 # if __name__ == '__main__':

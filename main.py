@@ -3,10 +3,17 @@ import threading
 from flask import Flask, Response, render_template
 from flask_socketio import SocketIO, emit
 
+audio_settings = {
+    'fs': 3e5,  # sample rate
+    'nFreq': 1e2,  # number of frequency values to send
+    'fScale': 'log',  # frequency spacing, linear or log
+    'window': .01,  # length of window in seconds
+    'overlap': .5,  # fractional overlap
+}
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='threading')
 
-ag = SLCam.AcquisitionGroup(frame_rate=30, audio_rate = int(3e5))
+ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 
 # this section is a placeholder
 # we will want to use the GUI to manage these settings
@@ -18,6 +25,10 @@ ag.run()
 
 emitter = threading.Thread(target=ag.nidaq.display, args=(socketio))
 emitter.start()
+
+
+# sendSize = int(settings['nFreq'] / settings['window'] / settings['overlap'])
+
 
 # api_switch = {
 #     'start_camera_group': ag.start,
@@ -33,7 +44,7 @@ emitter.start()
 
 @socketio.on('connect')
 def connected():
-  emit('settings', {'center': 0, 'fs': ag.nidaq.sample_rate})
+  emit('settings', settings)
   # don't actually know what center should be...
 
 
