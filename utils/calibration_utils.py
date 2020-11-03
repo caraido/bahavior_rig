@@ -19,16 +19,50 @@ def get_expected_corners(board):
     return (board_size[0] - 1) * (board_size[1] - 1)
 
 
-def check_aligned(id, corner, trueids, truecorners, CI):
-    for trueid in trueids:
-        pass # TODO
-
-    aligned = [True if tcor+CI>cor>np.maximum(tcor-CI,0) else False for cor, tcor in zip(corners,truecorners) ]
-    if all(aligned):
-        return 255
+def check_ids(ids):
+    if ids is None:
+        return False
     else:
-        return 0
+        return True
 
+
+def check_corners(corners):
+    check = []
+    for corner in corners:
+        if np.shape(corner)[1] == 4:
+            check.append(True)
+        else:
+            check.append(False)
+    if all(check) and len(check)>=3:
+        return True
+    else:
+        return False
+
+
+def check_aligned(idf, corner, trueids, truecorners, CI):
+
+    index = idf == np.array(trueids)
+    assert any(index),AssertionError("can't find the detected id in configuration file!")
+
+    check =[]
+    truecorner = np.array(truecorners)[index][0]
+    for point1, point2 in zip(corner[0], truecorner[0]):
+        if point2[0]+CI>=point1[0]>=np.maximum(point2[0]-CI,0) and \
+                point2[1]+CI>=point1[1]>=np.maximum(point2[1]-CI,0):
+            check.append(True)
+        else:
+            check.append(False)
+    if all(check):
+        return 255, True
+    else:
+        return 0, False
+
+
+def reformat_ids(ids):
+    new_ids = []
+    for item in ids:
+        new_ids.append(int(item[0]))
+    return np.array(new_ids)
 
 def trim_corners(allCorners, allIds, maxBoards=85):
     '''
@@ -99,14 +133,15 @@ def quick_calibrate(someCorners, someIds, board, width, height):
     allCorners, allIds = trim_corners(allCorners, allIds, maxBoards=100)
     allCornersConcat, allIdsConcat, markerCounter = reformat_corners(allCorners, allIds)
 
-    expected_markers = get_expected_corners(board)
+    expected_markers = get_expected_corners(board)+1
 
     print("\nfound {} markers, {} boards, {} complete boards".format(
         len(allCornersConcat), len(markerCounter),
         np.sum(markerCounter == expected_markers)))
+    if len(allCornersConcat)<10 or len(markerCounter)<10:
+        print("There are not enough markers to perform intrinsic calibration!")
+        return {}
+    else:
+        calib_params = quick_calibrate_charuco(allCorners, allIds, board, width, height)
+        return calib_params
 
-    calib_params = quick_calibrate_charuco(allCorners, allIds, board, width, height)
-    return calib_params
-
-def ex_alignment():
-    pass

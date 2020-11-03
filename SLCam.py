@@ -17,7 +17,6 @@ import time
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 
-
 class CharucoBoard:
   def __init__(self, x, y, marker_size=0.8):
     self.x = x
@@ -107,11 +106,15 @@ class Calib:
         with open(path, 'r') as f:
           # there only should be only one calib file for each camera
           self.config = toml.load(f)
+          try:
+            self.config['ids'] = cau.reformat_ids(self.config['ids'])
+          except ValueError:
+            print("there's nothing in the configuration file called ids! Please check.")
 
   def save_config(self, camera_serial_number, width, height):
     save_path = self.save_path + camera_serial_number + '.toml'
     if os.path.exists(save_path):
-      print('\n config file already exists.')
+      print('Configuration file already exists.')
     else:
       if self.type == "intrinsic":
         param = cau.quick_calibrate(self.allCorners,
@@ -120,16 +123,22 @@ class Calib:
                                     width,
                                     height)
         param['camera_serial_number'] = camera_serial_number
-        with open(save_path, 'w') as f:
-          toml.dump(param, f)
-        print('intrinsic calibration configuration saved!')
+        if len(param)>1:
+          with open(save_path, 'w') as f:
+            toml.dump(param, f)
+          print('intrinsic calibration configuration saved!')
+        else:
+          print("intrinsic calibration configuration NOT saved due to lack of markers.")
       else:
-        param = {'corners': self.allCorners,
-                 'ids': self.allIds, 'CI': 5,
-                 'camera_serial_number': camera_serial_number}
-        with open(save_path, 'w') as f:
-          toml.dump(param, f)
-        print('extrinsic calibration configuration saved!')
+        if not len(self.allIds)<self.max_size+1:
+          param = {'corners': np.array(self.allCorners),
+                   'ids': np.array(self.allIds), 'CI': 5,
+                   'camera_serial_number': camera_serial_number}
+          with open(save_path, 'w') as f:
+            toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
+            print('extrinsic calibration configuration saved!')
+        else:
+          raise Exception("failed to record all Ids! can't save configuration. Please calibrate again.")
 
 
 class Camera:
@@ -214,8 +223,7 @@ class Camera:
         print(f'stopped camera {self.device_serial_number}')
 
   def capture(self):
-    # can we set a timeout here? don't want to infinitely hang if there's an issue
-    im = self._spincam.GetNextImage()
+    im = self._spincam.GetNextImage(100) #can we set a timeout here? don't want to infinitely hang if there's an issue: Yes!
 
     # parse to make sure that image is complete....
     if im.IsIncomplete():
@@ -268,11 +276,11 @@ class Camera:
 
   def intrinsic_calibration_switch(self):
     if not self._in_calibrating:
-      print('turning on intrinsic calibration mode')
+      print('turning ON intrinsic calibration mode')
       self._in_calibrating = True
       self.in_calib.reset()
     else:
-      print('turning off intrinsic calibration mode')
+      print('turning OFF intrinsic calibration mode')
       self._in_calibrating = False
       self.in_calib.save_config(self.device_serial_number,
                                 self.width,
@@ -280,12 +288,12 @@ class Camera:
 
   def extrinsic_calibration_switch(self):
     if not self._ex_calibrating:
-      print('turning on extrinsic calibration mode')
+      print('turning ON extrinsic calibration mode')
       self._ex_calibrating = True
       self.ex_calib.reset()
       self.ex_calib.load_config(self.device_serial_number)
     else:
-      print('turning off extrinsic calibration mode')
+      print('turning OFF extrinsic calibration mode')
       self._ex_calibrating = False
       self.ex_calib.save_config(self.device_serial_number,
                                 self.width,
@@ -339,28 +347,32 @@ class Camera:
             yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
 
   def extrinsic_calibration(self, frame):
+    # if there isn't configuration on the screen, save corners and ids
     if self.ex_calib.config is None:
       text = 'No configuration file found. Performing initial extrinsic calibration... '
       cv2.putText(frame, text, (50, 50),
                   cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-      # key step: detect markers
+      # get parameters
       params = cau.get_calib_param()
 
-      # get corners and refine them in openCV
+      # detect corners
       corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
           frame, self.ex_calib.board.dictionary, parameters=params)
 
+      # draw corners on the screen
       cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
-      self.ex_calib.allCorners = corners
-      self.ex_calib.allIds = ids
+
+      if len(ids) >= len(self.ex_calib.allIds):
+        self.ex_calib.allCorners = corners
+        self.ex_calib.allIds = ids
     else:
       text = 'Found configuration file for this camera. Calibrating...'
       cv2.putText(frame, text, (50, 50),
                   cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
-      truecorners = self.ex_calib.config['corners']
-      trueids = self.ex_calib.config['ids']
-      CI = self.ex_calib.config['CI']  # pixels
+      truecorners = self.ex_calib.config['corners']  # float numbers
+      trueids = self.ex_calib.config['ids']  # int numbers
+      CI = self.ex_calib.config['CI']  # int pixels
 
       # key step: detect markers
       params = cau.get_calib_param()
@@ -368,20 +380,33 @@ class Camera:
           frame, self.ex_calib.board.dictionary, parameters=params)
       cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
 
-      truecorners_dict = dict(zip(trueids, truecorners))
+      # make sure there are ids and markers and the number of ids is no less than 3
+      if cau.check_ids(ids) and cau.check_corners(corners):
+        aligns = []
+        colors = [0] * (self.ex_calib.max_size+1)
+        # check if aligned:
+        for idf, corner in zip(ids, corners):
+          color, align = cau.check_aligned(idf, corner, trueids,truecorners, CI)
+          aligns.append(align)
+          colors.append(color)
 
-      aligns = []
-      # check if aligned:
-      for idf, corner in zip(ids, corners):
-        color, align = cau.check_aligned(idf, corner, truecorners_dict, CI)
-        aligns.append(aligns)
-        cv2.rectangle(
-            frame, truecorners_dict[idf][0], truecorners_dict[idf][[2]], color, 5)
+        for i,truecorner in enumerate(truecorners):
+          point1 = tuple(np.array(truecorner[0][0],np.int))
+          point2 = tuple(np.array(truecorner[0][1],np.int))
+          point3 = tuple(np.array(truecorner[0][2],np.int))
+          point4 = tuple(np.array(truecorner[0][3],np.int))
+          cv2.line(frame,point1,point2,color=255, thickness=5)
+          cv2.line(frame, point2, point3, color=255, thickness=5)
+          cv2.line(frame, point3, point4, color=255, thickness=5)
+          cv2.line(frame, point4, point1, color=255, thickness=5)
 
-      if all(aligns):
-        text = 'All corners aligned!'
-        cv2.putText(frame, text, (100, 0),
-                    cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+
+        if all(aligns):
+          text = 'Enough corners aligned! Ready to go'
+          cv2.putText(frame, text, (700, 1000), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+        else:
+          text = "Missing ids or corners!"
+          cv2.putText(frame, text, (500, 1000), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
   def run(self):
     flag = False
@@ -400,6 +425,8 @@ class Camera:
           flag = True
       if flag:
         return
+
+
 
   def __del__(self):
     self.stop()
