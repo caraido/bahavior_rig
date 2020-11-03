@@ -1,6 +1,6 @@
 import SLCam
 import threading
-from flask import Flask, Response, render_template
+from flask import Flask, Response, render_template, request
 # from flask_socketio import SocketIO, emit
 
 audio_settings = {
