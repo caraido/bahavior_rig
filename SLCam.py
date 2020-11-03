@@ -1,7 +1,7 @@
 import cv2
 import PySpin
 import numpy as np
-from scipy import signal
+from scipy import signal, interpolate
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import ffmpeg
@@ -416,7 +416,7 @@ class Nidaq:
     self.sample_rate = int(audio_settings['fs'])
     self.trigger_freq = frame_rate
     self.duty_cycle = .01
-    self.read_rate = 1  # in Hz, depends on PC buffer size...
+    self.read_rate = audio_settings['readRate']  # in Hz, depends on PC buffer size...
     self._read_size = self.sample_rate // self.read_rate
     self.read_count = 0
 
@@ -429,6 +429,23 @@ class Nidaq:
     self._nfft = int(audio_settings['nFreq'])
     self._window = int(audio_settings['window'] * self.sample_rate)
     self._overlap = int(audio_settings['overlap'] * self._window)
+    self._nx = int(np.floor(self.sample_rate-self._overlap)/(self._window-self._overlap))
+
+    #number of calculated timepoints
+    self._xq = np.linspace(0, 1, num=self._nx)
+
+    #number of frequency points
+    self._yq = np.linspace(0, int(self.sample_rate/2), num=int(self._window/2 + 1))
+
+    # we will use scip.interpolate to convert yq to zq
+    if audio_settings['fScale']=='linear':
+      self._zq = np.linspace(int(audio_settings['fMin']), int(audio_settings['fMax']), num=int(audio_settings['nFreq']))
+    else:
+      self._zq = np.logspace(int(np.log10(audio_settings['fMin'])), int(np.log10(audio_settings['fMax'])), num=int(audio_settings['nFreq']))
+
+    self._freq_correct = audio_settings['correction']
+
+    self._frame_bytes = BytesIO()
 
   def start(self, filepath=None, display=False):
     with self._running_lock:
@@ -520,13 +537,13 @@ class Nidaq:
       # if not logging, will we get an error if we do nothing?
       pass
 
-  def display(self, socket=None):
-    print('display loop')
+  def display(self):
     '''
     Calculate the spectrogram of the data and send to connected browsers.
     There are many ways to approach this, in particular by using wavelets or by using
     overlapping FFTs. For now just trying non-overlapping FFTs ~ the simplest approach.
     '''
+
     flag = False
     if self._displaying:
       with self._data_lock:
@@ -551,19 +568,33 @@ class Nidaq:
 
         if flag:
           # we ought to extend the sampled data range so that the tails of the spectrogram are accurate with the desired overlap
+          # but as the number of windows increases, this probably becomes minor
 
           _, _, spectrogram = signal.spectrogram(self.data[(
               self.read_count-1) % self._nBuffers], self.sample_rate, nperseg=self._window, noverlap=self._overlap)
 
-          # # is the gain too high?
-          # spectrogram = signal.resample(
-          #     abs(np.fft.fftshift(np.fft.fft(self.data[(self.read_count-1) % self._nBuffers]))), self._nfft)
+          # print(self._xq.shape, self._yq.shape, spectrogram.shape, self._zq.shape)
+          respect = interpolate.RectBivariateSpline(self._yq, self._xq, spectrogram)(self._zq, self._xq)
 
-          # pass the most recent data to any connected browser
-          print('emitting fft')
-          socket.emit('fft', {'s': signal.resample(
-              spectrogram, self._nfft, axis=0).flatten().tolist()})
-          # downsample the fft by a lot... better ways to do this, but can't handle so much data
+          if self._freq_correct == True:
+            respect *= self._zq[:,np.newaxis]
+            #corrects for 1/f noise by multiplying with f
+
+          thisMin = np.amin(respect, axis=(0,1))
+          respect -= thisMin
+
+          thisMax = np.amax(respect, axis=(0,1))
+
+          respect /= thisMax #normalized to [0,1]
+
+          respect = mpl.cm.viridis(respect) * 255 #colormap
+
+          self._frame_bytes.seek(0)  # go to the beginning of the buffer
+          Image.fromarray(respect.astype(np.uint8)).save(self._frame_bytes, 'bmp')
+          yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
+
+
+           # socket.emit('fft', {'s': respect.flatten('F').tolist()})
 
           flag = False
 

@@ -5,10 +5,14 @@ from flask_socketio import SocketIO, emit
 
 audio_settings = {
     'fs': 3e5,  # sample rate
-    'nFreq': 1e2,  # number of frequency values to send
+    'fMin': 20000,
+    'fMax': 115000,
+    'nFreq': 5e3,  # number of frequency values to send
     'fScale': 'log',  # frequency spacing, linear or log
-    'window': .01,  # length of window in seconds
-    'overlap': .5,  # fractional overlap
+    'window': .0032,  # length of window in seconds
+    'overlap': .875,  # fractional overlap
+    'correction': True, #whether to correct for 1/f noise
+    'readRate': 1, #how frequently to read off the Daq
 }
 app = Flask(__name__)
 socketio = SocketIO(app, async_mode='threading', cors_allowed_origins=[])
@@ -41,11 +45,10 @@ emitter.start()
 
 # this is a placeholder, mimicking a post request using a get request
 
-
+#probably nix socket.io in favor of http api
 @socketio.on('connect')
 def connected():
   emit('settings', audio_settings)
-  # don't actually know what center should be...
 
 
 @app.route('/api/stop')
@@ -63,6 +66,9 @@ def calibration_switch():
 def generate_frame(cam_id):
   return Response(ag.cameras[cam_id].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+@app.route('/audio')
+def generate_spectrogram():
+  return Response(ag.nidaq.display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 @app.route('/')
 def index():
