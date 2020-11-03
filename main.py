@@ -1,6 +1,6 @@
 import SLCam
 import threading
-from flask import Flask, Response, render_template, request
+from flask import Flask, Response, render_template, request, redirect, url_for
 # from flask_socketio import SocketIO, emit
 
 audio_settings = {
@@ -38,10 +38,10 @@ ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 # filepaths=['C:\\Users\\SchwartzLab\\Desktop\\Testing.mov', 'C:\\Users\\SchwartzLab\\Desktop\\Testing.tdms'], isDisplayed=[True, True])
 
 # run collection in the background -- this should ultimately be initiated by a gui button
-ag.run()
+# ag.run()
 
-emitter = threading.Thread(target=ag.nidaq.display)
-emitter.start()
+# emitter = threading.Thread(target=ag.nidaq.display)
+# emitter.start()
 
 
 # sendSize = int(settings['nFreq'] / settings['window'] / settings['overlap'])
@@ -55,14 +55,16 @@ api_switch = {
 }
 
 
-@app.route('/api', methods=['POST'])
+@app.route('/api', methods=['GET','POST'])
 def apiRouter():
+  print(request.method)
   if request.method == 'POST':
     api_switch.get(request.form['action'])()
+    ag.run()
+
+  return redirect(url_for('index'), code=302)
 
 # this is a placeholder, mimicking a post request using a get request
-
-
 # @app.route('/api/stop')
 # def stop_running():
 #   ag.stop()

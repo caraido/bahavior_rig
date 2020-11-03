@@ -643,8 +643,7 @@ class AcquisitionGroup:
                     for i in range(self.nCameras)]
     self.nidaq = Nidaq(frame_rate, audio_settings)
 
-    self._runners = [threading.Thread(
-        target=cam.run) for cam in self.cameras] + [threading.Thread(target=self.nidaq.run)]
+    self._runners = []
 
   def start(self, filepaths=None, isDisplayed=None):
     if not filepaths:
@@ -654,14 +653,30 @@ class AcquisitionGroup:
 
     for cam, fp, disp in zip(self.cameras, filepaths[: -1], isDisplayed[: -1]):
       cam.start(filepath=fp, display=disp)
+      print('starting camera')
 
     # once the camera BeginAcquisition methods are called, we can start triggering
     self.nidaq.start(filepath=filepaths[-1], display=isDisplayed[-1])
+    print('starting nidaq')
 
   def run(self):
     # begin gathering samples
-    for runner in self._runners:
-      runner.start()
+    if not self._runners:
+      for i, cam in enumerate(self.cameras):
+        self._runners.append(threading.Thread(target=cam.run))
+        self._runners[i].start()
+      self._runners.append(threading.Thread(target=self.nidaq.run))
+      self._runners[-1].start()
+
+    else:
+      for i, cam in enumerate(self.cameras):
+        if not self._runners[i].is_alive():
+          self._runners[i] = threading.Thread(target=cam.run)
+          self._runners[i].start()
+
+      if not self._runners[-1].is_alive():
+        self._runners[-1] = threading.Thread(target=self.nidaq.run)
+        self._runners[-1].start()
 
   def stop(self):
     for cam in self.cameras:
