@@ -6,12 +6,18 @@
 </head>
 
 <body>
+  <form action="/api" method="post">
+    <input type="submit" name="start acquisition" value="start_acquisition" />
+  </form>
+  <form action="/api" method="post">
+    <input type="submit" name="stop acquisition" value="stop_acquisition" />
+  </form>
   <img src='/video/0'></img>
-<!--  <div id="canvasContainer"></div>-->
+  <!--  <div id="canvasContainer"></div>-->
   <img src='/audio' max-width="100%" max-height="100%"></img>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.1/socket.io.min.js"></script>
-<!--  <script src="https://cdn.jsdelivr.net/npm/p5@1.1.9/lib/p5.js"></script>-->
-<!--  <script src="static/index.js"></script>-->
+  <!--  <script src="https://cdn.jsdelivr.net/npm/p5@1.1.9/lib/p5.js"></script>-->
+  <!--  <script src="static/index.js"></script>-->
   <!-- <canvas id="waterfall"></canvas> -->
 </body>
 
