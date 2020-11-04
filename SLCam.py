@@ -14,6 +14,7 @@ from PIL import Image
 import nidaqmx
 from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 import time
+import pandas as pd
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 
@@ -93,6 +94,16 @@ class Calib:
     self.decimator = 0
     self.config = None
 
+  @property
+  def params(self):
+    params = cv2.aruco.DetectorParameters_create()
+    params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_CONTOUR
+    params.adaptiveThreshWinSizeMin = 100
+    params.adaptiveThreshWinSizeMax = 700
+    params.adaptiveThreshWinSizeStep = 50
+    params.adaptiveThreshConstant = 5
+    return params
+
   def load_config(self, camera_serial_number):
     if not os.path.exists(self.load_path):
       os.mkdir(self.load_path)
@@ -107,9 +118,14 @@ class Calib:
           # there only should be only one calib file for each camera
           self.config = toml.load(f)
           try:
-            self.config['ids'] = cau.reformat_ids(self.config['ids'])
+            self.config['ids'] = cau.reformat(self.config['ids'])
+            self.config['corners'] = cau.reformat(self.config['corners'])
+            markers = pd.DataFrame({'truecorners': list(self.config['corners'])},
+                                                  index=list(self.config['ids']))
+            self.config['markers'] = markers
           except ValueError:
             print("there's nothing in the configuration file called ids! Please check.")
+
 
   def save_config(self, camera_serial_number, width, height):
     save_path = self.save_path + camera_serial_number + '.toml'
@@ -258,7 +274,8 @@ class Camera:
       with self._frame_lock:
         self.frame = frame
         self.frame_count += 1
-        # self.display()
+        # TODO: this part should not be commented?
+        self.display()
 
     im.Release()
 
@@ -305,30 +322,23 @@ class Camera:
     cv2.putText(frame, text, (50, 50),
                 cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 125), 2)
 
-    # key step: detect markers
-    params = cv2.aruco.DetectorParameters_create()
-    params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_CONTOUR
-    params.adaptiveThreshWinSizeMin = 100
-    params.adaptiveThreshWinSizeMax = 700
-    params.adaptiveThreshWinSizeStep = 50
-    params.adaptiveThreshConstant = 5
+    # get corners and refine them in openCV for every 3 frames
+    if self.in_calib.decimator % 3 == 0:
+      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
+          frame, self.in_calib.board.dictionary, parameters=self.in_calib.params)
+      detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
+          cv2.aruco.refineDetectedMarkers(frame, self.in_calib.board, corners, ids,
+                                          rejectedImgPoints, parameters=self.in_calib.params)
 
-    # get corners and refine them in openCV
-    corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-        frame, self.in_calib.board.dictionary, parameters=params)
-    detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
-        cv2.aruco.refineDetectedMarkers(frame, self.in_calib.board, corners, ids,
-                                        rejectedImgPoints, parameters=params)
-
-    # interpolate corners and draw corners
-    if len(detectedCorners) > 0:
-      rest, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
-          detectedCorners, detectedIds, frame, self.in_calib.board)
-      if detectedCorners is not None and 2 <= len(
-              detectedCorners) <= self.in_calib.max_size and self.in_calib.decimator % 3 == 0:
-        self.in_calib.allCorners.append(detectedCorners)
-        self.in_calib.allIds.append(detectedIds)
-      cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
+      # interpolate corners and draw corners
+      if len(detectedCorners) > 0:
+        rest, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
+            detectedCorners, detectedIds, frame, self.in_calib.board)
+        if detectedCorners is not None and 2 <= len(
+                detectedCorners) <= self.in_calib.max_size:
+          self.in_calib.allCorners.append(detectedCorners)
+          self.in_calib.allIds.append(detectedIds)
+        cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
     self.in_calib.decimator += 1
 
     return frame
@@ -352,61 +362,67 @@ class Camera:
       text = 'No configuration file found. Performing initial extrinsic calibration... '
       cv2.putText(frame, text, (50, 50),
                   cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-      # get parameters
-      params = cau.get_calib_param()
 
-      # detect corners
-      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-          frame, self.ex_calib.board.dictionary, parameters=params)
+      # calibrate every 3 frames
+      if self.ex_calib.decimator % 3 == 0:
+        # get parameters
+        params = self.ex_calib.params
 
-      # draw corners on the screen
-      cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
+        # detect corners
+        corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
+            frame, self.ex_calib.board.dictionary, parameters=params)
 
-      if len(ids) >= len(self.ex_calib.allIds):
-        self.ex_calib.allCorners = corners
-        self.ex_calib.allIds = ids
+        # draw corners on the screen
+        cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
+
+        if len(ids) >= len(self.ex_calib.allIds):
+          self.ex_calib.allCorners = corners
+          self.ex_calib.allIds = ids
     else:
       text = 'Found configuration file for this camera. Calibrating...'
       cv2.putText(frame, text, (50, 50),
                   cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
-      truecorners = self.ex_calib.config['corners']  # float numbers
-      trueids = self.ex_calib.config['ids']  # int numbers
-      CI = self.ex_calib.config['CI']  # int pixels
+      if True: #self.ex_calib.decimator % 3 == 0:
+        truecorners = self.ex_calib.config['corners']  # float numbers
+        trueids = self.ex_calib.config['ids']  # int numbers
+        CI = self.ex_calib.config['CI']  # int pixels
+        markers = self.ex_calib.config['markers']
 
-      # key step: detect markers
-      params = cau.get_calib_param()
-      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-          frame, self.ex_calib.board.dictionary, parameters=params)
-      cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
+        # key step: detect markers
+        corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
+            frame, self.ex_calib.board.dictionary, parameters=self.ex_calib.params)
 
-      # make sure there are ids and markers and the number of ids is no less than 3
-      if cau.check_ids(ids) and cau.check_corners(corners):
-        aligns = []
-        colors = [0] * (self.ex_calib.max_size+1)
-        # check if aligned:
-        for idf, corner in zip(ids, corners):
-          color, align = cau.check_aligned(idf, corner, trueids,truecorners, CI)
-          aligns.append(align)
-          colors.append(color)
+        # make sure there are ids and markers and the number of ids is no less than 3
+        if cau.check_ids(ids) and cau.check_corners(corners):
 
-        for i,truecorner in enumerate(truecorners):
-          point1 = tuple(np.array(truecorner[0][0],np.int))
-          point2 = tuple(np.array(truecorner[0][1],np.int))
-          point3 = tuple(np.array(truecorner[0][2],np.int))
-          point4 = tuple(np.array(truecorner[0][3],np.int))
-          cv2.line(frame,point1,point2,color=255, thickness=5)
-          cv2.line(frame, point2, point3, color=255, thickness=5)
-          cv2.line(frame, point3, point4, color=255, thickness=5)
-          cv2.line(frame, point4, point1, color=255, thickness=5)
+          # check if aligned:
+          aligns, colors = cau.get_align_color(ids,corners, trueids,truecorners,CI)
 
+          markers['aligns'] = pd.Series(aligns,index=list(map(str,cau.reformat(ids))))
+          markers['colors'] = pd.Series(colors,index=list(map(str,cau.reformat(ids))))
 
-        if all(aligns):
-          text = 'Enough corners aligned! Ready to go'
-          cv2.putText(frame, text, (700, 1000), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-        else:
-          text = "Missing ids or corners!"
-          cv2.putText(frame, text, (500, 1000), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+          # any way to make it more concise?
+          for tid,truecorner in zip(trueids,truecorners):
+            real_color = int(markers['colors'][tid]) if pd.notna(markers['colors'][tid]) else 200
+            point1 = tuple(np.array(truecorner[0],np.int))
+            point2 = tuple(np.array(truecorner[1],np.int))
+            point3 = tuple(np.array(truecorner[2],np.int))
+            point4 = tuple(np.array(truecorner[3],np.int))
+            cv2.line(frame,point1,point2,color=real_color, thickness=CI*2)
+            cv2.line(frame, point2, point3, color=real_color, thickness=CI*2)
+            cv2.line(frame, point3, point4, color=real_color, thickness=CI*2)
+            cv2.line(frame, point4, point1, color=real_color, thickness=CI*2)
+          # draw the detected markers on top of the true markers.
+          cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
+
+          if all(aligns):
+            text = 'Enough corners aligned! Ready to go'
+            cv2.putText(frame, text, (500, 1000), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+          else:
+            text = "Missing ids or corners!"
+            cv2.putText(frame, text, (500, 1000), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+      self.ex_calib.decimator += 1
 
   def run(self):
     flag = False

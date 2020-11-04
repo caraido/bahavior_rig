@@ -4,23 +4,13 @@ import itertools
 from time import time
 
 
-def get_calib_param():
-    params = cv2.aruco.DetectorParameters_create()
-    params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_CONTOUR
-    params.adaptiveThreshWinSizeMin = 100
-    params.adaptiveThreshWinSizeMax = 700
-    params.adaptiveThreshWinSizeStep = 50
-    params.adaptiveThreshConstant = 5
-    return params
-
-
 def get_expected_corners(board):
     board_size = board.getChessboardSize()
     return (board_size[0] - 1) * (board_size[1] - 1)
 
 
 def check_ids(ids):
-    if ids is None:
+    if ids is None or ids==[]:
         return False
     else:
         return True
@@ -40,12 +30,12 @@ def check_corners(corners):
 
 
 def check_aligned(idf, corner, trueids, truecorners, CI):
-
-    index = idf == np.array(trueids)
-    assert any(index),AssertionError("can't find the detected id in configuration file!")
+    trueids=list(map(int,trueids))
+    index = idf == trueids
+    assert any(index), AssertionError("can't find the detected id in configuration file!")
 
     check =[]
-    truecorner = np.array(truecorners)[index][0]
+    truecorner = np.array(truecorners)[index]
     for point1, point2 in zip(corner[0], truecorner[0]):
         if point2[0]+CI>=point1[0]>=np.maximum(point2[0]-CI,0) and \
                 point2[1]+CI>=point1[1]>=np.maximum(point2[1]-CI,0):
@@ -55,14 +45,24 @@ def check_aligned(idf, corner, trueids, truecorners, CI):
     if all(check):
         return 255, True
     else:
-        return 0, False
+        return 200, False
 
+def get_align_color(ids,corners,trueids,truecorners,CI):
+    aligns=[]
+    colors=[]
 
-def reformat_ids(ids):
+    for idf, corner in zip(ids, corners):
+        color, align = check_aligned(idf, corner, trueids, truecorners, CI)
+        aligns.append(align)
+        colors.append(color)
+    return aligns, colors
+
+def reformat(ids):
     new_ids = []
     for item in ids:
-        new_ids.append(int(item[0]))
+        new_ids.append(item[0])
     return np.array(new_ids)
+
 
 def trim_corners(allCorners, allIds, maxBoards=85):
     '''

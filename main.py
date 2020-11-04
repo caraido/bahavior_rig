@@ -46,12 +46,32 @@ ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 
 # sendSize = int(settings['nFreq'] / settings['window'] / settings['overlap'])
 
-
+'''
 api_switch = {
     'start_acquisition': lambda: ag.start(
         filepaths=['C:\\Users\\SchwartzLab\\Desktop\\Testing.mov', 'C:\\Users\\SchwartzLab\\Desktop\\Testing.tdms'], isDisplayed=[True, True]
     ),
     'stop_acquisition': ag.stop,
+}
+'''
+
+def ex_calibration_switch():
+    ag.cameras[0].extrinsic_calibration_switch()
+    return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+def in_calibration_switch():
+    ag.cameras[0].intrinsic_calibration_switch()
+    return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+api_switch = {
+    'start_acquisition': lambda: ag.start(
+        filepaths=None, isDisplayed=[True, True]
+    ),
+    'stop_acquisition': ag.stop,
+    'intrinsic_calibration': lambda: in_calibration_switch(),
+    'extrinsic_calibration': lambda: ex_calibration_switch()
 }
 
 
@@ -71,13 +91,13 @@ def apiRouter():
   # socketio.emit('stopped')
 
 
-@app.route('/video/ex-calibration')
+#@app.route('/video/ex-calibration')
 def ex_calibration_switch():
     ag.cameras[0].extrinsic_calibration_switch()
     return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-@app.route('/video/in-calibration')
+#@app.route('/video/in-calibration')
 def in_calibration_switch():
     ag.cameras[0].intrinsic_calibration_switch()
     return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
