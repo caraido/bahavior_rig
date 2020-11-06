@@ -634,10 +634,8 @@ class Nidaq:
 
           self._frame_bytes.seek(0)  # go to the beginning of the buffer
           Image.fromarray(respect.astype(np.uint8)).save(self._frame_bytes, 'bmp')
-          yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
-
-
-           # socket.emit('fft', {'s': respect.flatten('F').tolist()})
+          yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n'
+          # socket.emit('fft', {'s': respect.flatten('F').tolist()})
 
           flag = False
 

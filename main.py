@@ -91,13 +91,13 @@ def apiRouter():
   # socketio.emit('stopped')
 
 
-#@app.route('/video/ex-calibration')
+@app.route('/video/ex-calibration')
 def ex_calibration_switch():
     ag.cameras[0].extrinsic_calibration_switch()
     return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-#@app.route('/video/in-calibration')
+@app.route('/video/in-calibration')
 def in_calibration_switch():
     ag.cameras[0].intrinsic_calibration_switch()
     return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
