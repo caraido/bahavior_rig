@@ -3,11 +3,9 @@ import scipy.fft as fft
 import scipy.signal as sig
 from nptdms import TdmsFile
 import os
+import scipy.io as sio
 
 sample_rate = 3e5
-
-GregVoice_path = r"C:\Users\SchwartzLab\Desktop\2020-10-29-GregVoice\""
-AngryMouse_path = r"C:\Users\SchwartzLab\Desktop\2020-10-29-angry-female-mouse-held-close\""
 
 # downsampling functions
 def read_audio(path, raw_data_flag=False):
@@ -18,7 +16,7 @@ def read_audio(path, raw_data_flag=False):
     with TdmsFile.open(f) as file:
         group = file.groups()[0]
         channel = group.channels()[0]
-        data = channel.data
+        data = channel[:]
 
         if raw_data_flag:
             raw_data = channel.raw_data
@@ -68,19 +66,24 @@ def DFT_pshift(x, f, G, overlap=0):
         y[n:n+G] += w * win
     return y
 
+if __name__ == '__main__':
+    GregVoice_path = 'C:\\Users\\SchwartzLab\\Desktop\\2020-10-29-GregVoice\\'
+    AngryMouse_path = 'C:\\Users\\SchwartzLab\\Desktop\\2020-10-29-angry-female-mouse-held-close\\'
+    AlecMusic_path = 'C:\\Users\\SchwartzLab\\Desktop\\AlecMusic_grounded_01VPa_316\\'
+    Testing_path = 'C:\\Users\\SchwartzLab\\Desktop\\Testing_5000Hz\\'
 
-# load data
-data,_ = read_audio(path=GregVoice_path)
+    # load data
+    data,_ = read_audio(path=AngryMouse_path)
 
-# Fs from 300kHz to 32kHz
-resampled_data = audio_resample(data=data,old_samprate=sample_rate,new_samprate=3.2e4)
+    # Fs from 300kHz to 32kHz
+    resampled_data = audio_resample(data=data,old_samprate=sample_rate,new_samprate=3.2e4)
 
-# from 90kHz to 30kHz is to rescale the frequency 0.3 times
-shifted_data = DFT_pshift(data, 0.3, ms2smp(40, Fs=sample_rate))
-# or
-shifted_resampled_data = DFT_pshift(resampled_data, 0.3, ms2smp(40, Fs=3.2e4))
+    # from 90kHz to 30kHz is to rescale the frequency 0.3 times
+    #shifted_data = DFT_pshift(data, 0.3, ms2smp(40, Fs=sample_rate))
+    # or
+    #shifted_resampled_data = DFT_pshift(resampled_data, 0.3, ms2smp(40, Fs=3.2e4))
 
-
+    sio.savemat(AngryMouse_path+'resampled.mat',{'data': resampled_data})
 
 
 
