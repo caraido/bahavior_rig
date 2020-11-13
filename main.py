@@ -5,8 +5,8 @@ from flask import Flask, Response, render_template, request, redirect, url_for
 
 audio_settings = {
     'fs': 3e5,  # sample rate
-    'fMin': 20000,
-    'fMax': 115000,
+    'fMin': 20,
+    'fMax': 20000,
     'nFreq': 5e3,  # number of frequencies to plot
     'fScale': 'log',  # frequency spacing, linear or log
     'window': .0032,  # length of window in seconds
@@ -23,10 +23,8 @@ audio_settings = {
 
     # nFreq determines the number of frequencies that are plotted (by cubic interpolation), not calculated
     # the browser also performs some interpolation, so nFreq should be as low as possible to see features of interest
-
-
-
 }
+
 app = Flask(__name__)
 # socketio = SocketIO(app, async_mode='threading', cors_allowed_origins=[])
 
@@ -42,38 +40,51 @@ ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 
 # emitter = threading.Thread(target=ag.nidaq.display)
 # emitter.start()
-
-
 # sendSize = int(settings['nFreq'] / settings['window'] / settings['overlap'])
 
-'''
-api_switch = {
-    'start_acquisition': lambda: ag.start(
-        filepaths=['C:\\Users\\SchwartzLab\\Desktop\\Testing.mov', 'C:\\Users\\SchwartzLab\\Desktop\\Testing.tdms'], isDisplayed=[True, True]
-    ),
-    'stop_acquisition': ag.stop,
-}
-'''
+def display_switch():
+    ag.cameras[0].display_switch_on()
+    ag.nidaq.display_switch_on()
+
 
 def ex_calibration_switch():
-    ag.cameras[0].extrinsic_calibration_switch()
-    return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    result = ag.cameras[0].extrinsic_calibration_switch()
+    # TODO: change mimetype to display on webpage based on the returned value type
+    if isinstance(result,str):
+        data_type = 'text/html'
+    else:
+        data_type = 'multipart/x-mixed-replace; boundary=frame'
+    return Response(result, mimetype=data_type)
 
 
 def in_calibration_switch():
-    ag.cameras[0].intrinsic_calibration_switch()
-    return Response(ag.cameras[0].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
+    result = ag.cameras[0].intrinsic_calibration_switch()
+    # TODO: change mimetype to display on webpage based on the returned value type
+    if isinstance(result, str):
+        data_type = 'text/html'
+    else:
+        data_type = 'multipart/x-mixed-replace; boundary=frame'
+    return Response(result, mimetype=data_type)
 
 
 api_switch = {
+    'camera_preview': lambda: display_switch(),
+    'spectrogram_preview': 0,
     'start_acquisition': lambda: ag.start(
-        filepaths=None, isDisplayed=[True, True]
+        filepaths=None, isDisplayed=None
     ),
     'stop_acquisition': ag.stop,
-    'intrinsic_calibration': lambda: in_calibration_switch(),
-    'extrinsic_calibration': lambda: ex_calibration_switch()
+    'intrinsic_calibration': in_calibration_switch,
+    'extrinsic_calibration': ex_calibration_switch
 }
-
+'''
+api_switch = {
+    'start_acquisition': lambda: ag.start(
+        filepaths=[None, 'C:\\Users\\SchwartzLab\\Desktop\\Testing_5000Hz.tdms'], isDisplayed=[True, True]
+    ),
+    'stop_acquisition': ag.stop,
+}
+'''
 
 @app.route('/api', methods=['GET','POST'])
 def apiRouter():

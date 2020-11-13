@@ -146,7 +146,7 @@ class Calib:
         else:
           print("intrinsic calibration configuration NOT saved due to lack of markers.")
       else:
-        if not len(self.allIds)<self.max_size+1:
+        if self.allIds is not None and not len(self.allIds)<self.max_size+1:
           param = {'corners': np.array(self.allCorners),
                    'ids': np.array(self.allIds), 'CI': 5,
                    'camera_serial_number': camera_serial_number}
@@ -154,6 +154,7 @@ class Calib:
             toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
             print('extrinsic calibration configuration saved!')
         else:
+          # TODO: should be a pop up window/show up on the screen
           raise Exception("failed to record all Ids! can't save configuration. Please calibrate again.")
 
 
@@ -207,8 +208,8 @@ class Camera:
       #     filepath, cv2.VideoWriter_fourcc(*'hvc1'), 30, (1024, 1280), False)
     else:
       self._saving = False
-
     self.frame_count = 0
+
     if display:
       self._displaying = True
     else:
@@ -218,6 +219,15 @@ class Camera:
       if not self._running:
         self._running = True
         self._spincam.BeginAcquisition()
+
+  def display_switch_on(self):
+    if not self._displaying:
+      self._displaying=True
+      with self._running_lock:
+        if not self._running:
+          self._running = True
+          self._spincam.BeginAcquisition()
+
 
   def stop(self):
     with self._running_lock:
@@ -239,7 +249,7 @@ class Camera:
         print(f'stopped camera {self.device_serial_number}')
 
   def capture(self):
-    im = self._spincam.GetNextImage(100) #can we set a timeout here? don't want to infinitely hang if there's an issue: Yes!
+    im = self._spincam.GetNextImage(100)
 
     # parse to make sure that image is complete....
     if im.IsIncomplete():
@@ -292,29 +302,37 @@ class Camera:
     return device_serial_number, height, width
 
   def intrinsic_calibration_switch(self):
-    if not self._in_calibrating:
-      print('turning ON intrinsic calibration mode')
-      self._in_calibrating = True
-      self.in_calib.reset()
+    if self._displaying:
+      if not self._in_calibrating:
+        print('turning ON intrinsic calibration mode')
+        self._in_calibrating = True
+        self.in_calib.reset()
+      else:
+        print('turning OFF intrinsic calibration mode')
+        self._in_calibrating = False
+        self.in_calib.save_config(self.device_serial_number,
+                                  self.width,
+                                  self.height)
     else:
-      print('turning OFF intrinsic calibration mode')
-      self._in_calibrating = False
-      self.in_calib.save_config(self.device_serial_number,
-                                self.width,
-                                self.height)
+      print("not displaying. Can't perform intrinsic calibration")
 
   def extrinsic_calibration_switch(self):
-    if not self._ex_calibrating:
-      print('turning ON extrinsic calibration mode')
-      self._ex_calibrating = True
-      self.ex_calib.reset()
-      self.ex_calib.load_config(self.device_serial_number)
+    if self._displaying:
+      if not self._ex_calibrating:
+        print('turning ON extrinsic calibration mode')
+        self._ex_calibrating = True
+        self.ex_calib.reset()
+        self.ex_calib.load_config(self.device_serial_number)
+      else:
+        print('turning OFF extrinsic calibration mode')
+        self._ex_calibrating = False
+        self.ex_calib.save_config(self.device_serial_number,
+                                  self.width,
+                                  self.height)
+      return self.display()
     else:
-      print('turning OFF extrinsic calibration mode')
-      self._ex_calibrating = False
-      self.ex_calib.save_config(self.device_serial_number,
-                                self.width,
-                                self.height)
+      # TODO: return a string to display on webpage
+      return "not displaying. Can't perform extrinsic calibration"
 
   def intrinsic_calibration(self, frame):
     # write something on the frame
@@ -371,13 +389,13 @@ class Camera:
         # detect corners
         corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
             frame, self.ex_calib.board.dictionary, parameters=params)
+        if ids is not None:
+          # draw corners on the screen
+          cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
 
-        # draw corners on the screen
-        cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
-
-        if len(ids) >= len(self.ex_calib.allIds):
-          self.ex_calib.allCorners = corners
-          self.ex_calib.allIds = ids
+          if len(ids) >= len(self.ex_calib.allIds):
+            self.ex_calib.allCorners = corners
+            self.ex_calib.allIds = ids
     else:
       text = 'Found configuration file for this camera. Calibrating...'
       cv2.putText(frame, text, (50, 50),
@@ -469,15 +487,16 @@ class Nidaq:
     self._data_lock = threading.Lock()
     self._saving = False
 
+    # for display
     self._nfft = int(audio_settings['nFreq'])
     self._window = int(audio_settings['window'] * self.sample_rate)
     self._overlap = int(audio_settings['overlap'] * self._window)
     self._nx = int(np.floor(self.sample_rate-self._overlap)/(self._window-self._overlap))
 
-    #number of calculated timepoints
+    # number of calculated timepoints
     self._xq = np.linspace(0, 1, num=self._nx)
 
-    #number of frequency points
+    # number of frequency points
     self._yq = np.linspace(0, int(self.sample_rate/2), num=int(self._window/2 + 1))
 
     # we will use scip.interpolate to convert yq to zq
@@ -561,6 +580,19 @@ class Nidaq:
         self.audio.start()
 
         self._running = True
+
+  def display_switch_on(self):
+    if not self._displaying:
+      self._displaying=True
+      self._audio_reader = AnalogReader(
+        self.audio.in_stream)
+      self._read_size = self.sample_rate // self.read_rate
+
+      self.data = [np.ndarray(shape=(self._read_size))
+                   for i in range(self._nBuffers)]
+
+      log_mode = nidaqmx.constants.LoggingMode.LOG_AND_READ
+
 
   def capture(self, read_count):
     if self._displaying:
@@ -694,11 +726,12 @@ class AcquisitionGroup:
 
     for cam, fp, disp in zip(self.cameras, filepaths[: -1], isDisplayed[: -1]):
       cam.start(filepath=fp, display=disp)
-      print('starting camera')
+      print('starting camera '+ cam.device_serial_number)
 
     # once the camera BeginAcquisition methods are called, we can start triggering
     self.nidaq.start(filepath=filepaths[-1], display=isDisplayed[-1])
     print('starting nidaq')
+
 
   def run(self):
     # begin gathering samples
@@ -726,7 +759,6 @@ class AcquisitionGroup:
 
   def __del__(self):
     for cam in self.cameras:
-      cam.stop()
       del cam
     self._camlist.Clear()
     self._system.ReleaseInstance()
