@@ -177,6 +177,8 @@ class Camera:
     self.in_calib = Calib('intrinsic')
     self.ex_calib = Calib('extrinsic')
 
+    self._start = False
+
     self._running = False
     self._running_lock = threading.Lock()
 
@@ -194,7 +196,7 @@ class Camera:
 
   def start(self, filepath=None, display=False):
     if filepath:
-      self._saving = True
+      #self._saving = True
 
       # we will assume hevc for now
       # will also assume 30fps
@@ -204,10 +206,10 @@ class Camera:
           .output(filepath, vcodec='libx265') \
           .overwrite_output() \
           .run_async(pipe_stdin=True)
-      # self.file = cv2.VideoWriter(
-      #     filepath, cv2.VideoWriter_fourcc(*'hvc1'), 30, (1024, 1280), False)
-    else:
-      self._saving = False
+
+    #else:
+    #  self._saving = False
+
     self.frame_count = 0
 
     if display:
@@ -220,6 +222,7 @@ class Camera:
         self._running = True
         self._spincam.BeginAcquisition()
 
+  '''
   def display_switch_on(self):
     if not self._displaying:
       self._displaying=True
@@ -227,7 +230,20 @@ class Camera:
         if not self._running:
           self._running = True
           self._spincam.BeginAcquisition()
+  '''
 
+  def saving_switch_on(self):
+    if not self._saving:
+      if self.file is not None:
+        self._saving = True
+      else:
+        raise FileNotFoundError("file path is not found!")
+    else:
+      self._saving = False
+      self.file.stdin.close()
+      self.file.wait()
+      del self.file
+      self.file = None
 
   def stop(self):
     with self._running_lock:
@@ -260,12 +276,9 @@ class Camera:
     frame = np.reshape(im.GetData(), (self.height, self.width))
     if self._saving:
       self.save(frame)
-
-    # press "i" or "e" key to turn on or off calibration mode
-    # if cv2.waitKey(1) & 0xFF == ord('c'):
-    #   self.extrinsic_calibration_switch()
-    # if cv2.waitKey(1) & 0xFF == ord('i'):
-    #   self.intrinsic_calibration_switch()
+      text = 'recording...'
+      cv2.putText(frame, text, (700,50),
+                  cv2.FONT_HERSHEY_PLAIN, 4.0, 255, 2)
 
     # check calibration status
     if self._in_calibrating and self._ex_calibrating:
@@ -362,7 +375,6 @@ class Camera:
     return frame
 
   def display(self):
-    # cv2.imshow('frame', self.frame)
     if self._displaying:
       with self._frame_lock:
         frame_count = self.frame_count  # get the starting number of frames
@@ -460,8 +472,6 @@ class Camera:
       if flag:
         return
 
-
-
   def __del__(self):
     self.stop()
 
@@ -486,8 +496,10 @@ class Nidaq:
     self._displaying = False
     self._data_lock = threading.Lock()
     self._saving = False
+    self.filepath = None
+    self.log_mode = nidaqmx.constants.LoggingMode.LOG_AND_READ
 
-    # for display
+    ## for display
     self._nfft = int(audio_settings['nFreq'])
     self._window = int(audio_settings['window'] * self.sample_rate)
     self._overlap = int(audio_settings['overlap'] * self._window)
@@ -538,8 +550,7 @@ class Nidaq:
           self.data = [np.ndarray(shape=(self._read_size))
                        for i in range(self._nBuffers)]
 
-          log_mode = nidaqmx.constants.LoggingMode.LOG_AND_READ
-
+          self.log_mode = nidaqmx.constants.LoggingMode.LOG_AND_READ
         else:
           self._displaying = False
           self._audio_reader = None
@@ -547,8 +558,13 @@ class Nidaq:
 
           self.data = None
 
-          log_mode = nidaqmx.constants.LoggingMode.LOG
+          self.log_mode = nidaqmx.constants.LoggingMode.LOG
 
+        self.audio.in_stream.configure_logging(
+          'C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms',
+          logging_mode=self.log_mode,
+          operation=nidaqmx.constants.LoggingOperation.CREATE)  # see nptdms
+        '''
         if filepath:
           self._saving = True
           self.audio.in_stream.configure_logging(
@@ -559,6 +575,9 @@ class Nidaq:
           self._saving = False
           self.audio.in_stream.configure_logging(
               '', logging_mode=nidaqmx.constants.LoggingMode.OFF)  # not sure if this works
+        '''
+        self._saving=False
+        self.filepath=filepath
 
         # trigger task
         self.trigger = nidaqmx.Task()
@@ -581,6 +600,18 @@ class Nidaq:
 
         self._running = True
 
+  def saving_switch_on(self):
+    if not self._saving:
+      self._saving=True
+      if self.filepath:
+        self.audio.in_stream.start_new_file(self.filepath)
+      else:
+        # TODO: will set a default path to save
+        raise FileNotFoundError("file path is not found!")
+    #else:
+    #  self._saving=False
+    #  self.audio.in_stream.logging_mode = nidaqmx.constants.LoggingMode.OFF
+
   def display_switch_on(self):
     if not self._displaying:
       self._displaying=True
@@ -590,9 +621,6 @@ class Nidaq:
 
       self.data = [np.ndarray(shape=(self._read_size))
                    for i in range(self._nBuffers)]
-
-      log_mode = nidaqmx.constants.LoggingMode.LOG_AND_READ
-
 
   def capture(self, read_count):
     if self._displaying:
@@ -718,11 +746,16 @@ class AcquisitionGroup:
 
     self._runners = []
 
-  def start(self, filepaths=None, isDisplayed=None):
+  def start(self, filepaths=None, isDisplayed=True):
     if not filepaths:
       filepaths = [None] * (self.nCameras + 1)
     if not isDisplayed:
       isDisplayed = [False] * (self.nCameras + 1)
+
+    if not isinstance(isDisplayed,list) or len(isDisplayed)==1:
+      isDisplayed = [isDisplayed] * (self.nCameras + 1)
+
+    print('detected %d cameras'%self.nCameras)
 
     for cam, fp, disp in zip(self.cameras, filepaths[: -1], isDisplayed[: -1]):
       cam.start(filepath=fp, display=disp)
@@ -756,6 +789,8 @@ class AcquisitionGroup:
     for cam in self.cameras:
       cam.stop()
     self.nidaq.stop()  # make sure cameras are stopped before stopping triggers
+    os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
+    os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms_index')
 
   def __del__(self):
     for cam in self.cameras:

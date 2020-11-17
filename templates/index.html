@@ -6,17 +6,16 @@
 </head>
 
 <body>
+
+
   <form action="/api" method="post">
-    <input type="submit" name="action" value="camera_preview" />
+    <input type="submit" name="action" value="start" />
+  </form>
+    <form action="/api" method="post">
+    <input type="submit" name="action" value="record" />
   </form>
   <form action="/api" method="post">
-    <input type="submit" name="action" value="spectrogram_preview" />
-  </form>
-  <form action="/api" method="post">
-    <input type="submit" name="action" value="start_acquisition" />
-  </form>
-  <form action="/api" method="post">
-    <input type="submit" name="action" value="stop_acquisition" />
+    <input type="submit" name="action" value="save and quit" />
   </form>
   <form action="/api" method="post">
     <input type="submit" name="action" value="intrinsic_calibration" />
@@ -24,9 +23,9 @@
   <form action="/api" method="post">
     <input type="submit" name="action" value="extrinsic_calibration" />
   </form>
-  <img src='/video/0'/>
+  <img src='/video/0'style="width:768px; height:648px"/>
   <!--  <div id="canvasContainer"></div>-->
-  <img src='/audio' max-width="100%" max-height="100%" style="width:1600px; height:600px"/>
+  <img src='/audio' max-width="100%" max-height="100%" style="width:1280px; height:480px"/>
   <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.1/socket.io.min.js"></script> -->
   <!--  <script src="https://cdn.jsdelivr.net/npm/p5@1.1.9/lib/p5.js"></script>-->
   <!--  <script src="static/index.js"></script>-->

@@ -5,10 +5,10 @@ from flask import Flask, Response, render_template, request, redirect, url_for
 
 audio_settings = {
     'fs': 3e5,  # sample rate
-    'fMin': 20,
+    'fMin': 200,
     'fMax': 20000,
     'nFreq': 5e3,  # number of frequencies to plot
-    'fScale': 'log',  # frequency spacing, linear or log
+    'fScale': 'linear',  # frequency spacing, linear or log
     'window': .0032,  # length of window in seconds
     'overlap': .875,  # fractional overlap
     'correction': True,  # whether to correct for 1/f noise
@@ -30,6 +30,12 @@ app = Flask(__name__)
 
 ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 
+filepath = ['C:\\Users\\SchwartzLab\\Desktop\\Testing_AlecRecord.mov',
+            None,
+            None,
+            'C:\\Users\\SchwartzLab\\Desktop\\Testing_AlecRecord.tdms'
+]
+
 # this section is a placeholder
 # we will want to use the GUI to manage these settings
 # ag.start(
@@ -42,10 +48,9 @@ ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 # emitter.start()
 # sendSize = int(settings['nFreq'] / settings['window'] / settings['overlap'])
 
-def display_switch():
-    ag.cameras[0].display_switch_on()
-    ag.nidaq.display_switch_on()
-
+def record_switch():
+    ag.cameras[0].saving_switch_on()
+    ag.nidaq.saving_switch_on()
 
 def ex_calibration_switch():
     result = ag.cameras[0].extrinsic_calibration_switch()
@@ -68,12 +73,11 @@ def in_calibration_switch():
 
 
 api_switch = {
-    'camera_preview': lambda: display_switch(),
-    'spectrogram_preview': 0,
-    'start_acquisition': lambda: ag.start(
-        filepaths=None, isDisplayed=None
+    'record': record_switch,
+    'start': lambda: ag.start(
+        filepaths=filepath, isDisplayed=True
     ),
-    'stop_acquisition': ag.stop,
+    'save and quit': ag.stop,
     'intrinsic_calibration': in_calibration_switch,
     'extrinsic_calibration': ex_calibration_switch
 }
