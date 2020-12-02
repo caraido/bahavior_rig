@@ -15,8 +15,10 @@ import nidaqmx
 from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 import time
 import pandas as pd
+from dlclive import DLCLive, Processor
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
+
 
 class CharucoBoard:
   def __init__(self, x, y, marker_size=0.8):
@@ -194,6 +196,12 @@ class Camera:
     self._in_calibrating = False
     self._ex_calibrating = False
 
+    self._dlc = False
+    self._save_dlc = False
+    self.dlc_proc = None
+    self.dlc_live = None
+
+
   def start(self, filepath=None, display=False):
     if filepath:
       #self._saving = True
@@ -222,16 +230,6 @@ class Camera:
         self._running = True
         self._spincam.BeginAcquisition()
 
-  '''
-  def display_switch_on(self):
-    if not self._displaying:
-      self._displaying=True
-      with self._running_lock:
-        if not self._running:
-          self._running = True
-          self._spincam.BeginAcquisition()
-  '''
-
   def saving_switch_on(self):
     if not self._saving:
       if self.file is not None:
@@ -244,6 +242,18 @@ class Camera:
       self.file.wait()
       del self.file
       self.file = None
+
+  def dlc_switch(self,model_path=None):
+    if not self._dlc:
+      self.dlc_proc = Processor()
+      if model_path:
+        # TODO: displays should be False
+        self.dlc_live = DLCLive(model_path=model_path,processor=self.dlc_proc,display=True)
+      self._dlc = True
+    else:
+      self.dlc_live.close()
+      self._dlc = False
+
 
   def stop(self):
     with self._running_lock:
@@ -258,6 +268,7 @@ class Camera:
         # cv2.destroyAllWindows() #this appears to be causing errors?
         self._running = False
         self._displaying = False
+        self.dlc_switch()
 
         self._spincam.EndAcquisition()
         self._spincam.DeInit()
@@ -278,7 +289,7 @@ class Camera:
       self.save(frame)
       text = 'recording...'
       cv2.putText(frame, text, (700,50),
-                  cv2.FONT_HERSHEY_PLAIN, 4.0, 255, 2)
+                  cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
 
     # check calibration status
     if self._in_calibrating and self._ex_calibrating:
@@ -291,6 +302,10 @@ class Camera:
     # extrinsic calibration
     if self._ex_calibrating and not self._in_calibrating:
       self.extrinsic_calibration(frame)
+
+    if self._dlc:
+      self.dlc_live.init_inference(frame)
+      self.dlc_live.get_pose(frame)
 
     if self._displaying:
       # acquire lock on frame
@@ -343,9 +358,6 @@ class Camera:
                                   self.width,
                                   self.height)
       return self.display()
-    else:
-      # TODO: return a string to display on webpage
-      return "not displaying. Can't perform extrinsic calibration"
 
   def intrinsic_calibration(self, frame):
     # write something on the frame
@@ -521,7 +533,7 @@ class Nidaq:
 
     self._frame_bytes = BytesIO()
 
-  def start(self, filepath=None, display=False):
+  def start(self, filepath=None, display=True):
     with self._running_lock:
       if not self._running:
         # audio task
@@ -563,7 +575,7 @@ class Nidaq:
         self.audio.in_stream.configure_logging(
           'C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms',
           logging_mode=self.log_mode,
-          operation=nidaqmx.constants.LoggingOperation.CREATE)  # see nptdms
+          operation=nidaqmx.constants.LoggingOperation.CREATE_OR_REPLACE)  # see nptdms
         '''
         if filepath:
           self._saving = True
@@ -745,10 +757,11 @@ class AcquisitionGroup:
     self.nidaq = Nidaq(frame_rate, audio_settings)
 
     self._runners = []
+    self.filepaths=None
 
-  def start(self, filepaths=None, isDisplayed=True):
-    if not filepaths:
-      filepaths = [None] * (self.nCameras + 1)
+  def start(self, isDisplayed=True):
+    if not self.filepaths:
+      self.filepaths = [None] * (self.nCameras + 1)
     if not isDisplayed:
       isDisplayed = [False] * (self.nCameras + 1)
 
@@ -757,14 +770,13 @@ class AcquisitionGroup:
 
     print('detected %d cameras'%self.nCameras)
 
-    for cam, fp, disp in zip(self.cameras, filepaths[: -1], isDisplayed[: -1]):
+    for cam, fp, disp in zip(self.cameras, self.filepaths[: -1], isDisplayed[: -1]):
       cam.start(filepath=fp, display=disp)
       print('starting camera '+ cam.device_serial_number)
 
     # once the camera BeginAcquisition methods are called, we can start triggering
-    self.nidaq.start(filepath=filepaths[-1], display=isDisplayed[-1])
+    self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
     print('starting nidaq')
-
 
   def run(self):
     # begin gathering samples

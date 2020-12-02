@@ -2,13 +2,15 @@ import SLCam
 import threading
 from flask import Flask, Response, render_template, request, redirect, url_for
 # from flask_socketio import SocketIO, emit
+import cgi,cgitb
+from utils import path_operation_utils as pop
 
 audio_settings = {
     'fs': 3e5,  # sample rate
     'fMin': 200,
-    'fMax': 20000,
+    'fMax': 80000,
     'nFreq': 5e3,  # number of frequencies to plot
-    'fScale': 'linear',  # frequency spacing, linear or log
+    'fScale': 'log',  # frequency spacing, linear or log
     'window': .0032,  # length of window in seconds
     'overlap': .875,  # fractional overlap
     'correction': True,  # whether to correct for 1/f noise
@@ -30,11 +32,14 @@ app = Flask(__name__)
 
 ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 
-filepath = ['C:\\Users\\SchwartzLab\\Desktop\\Testing_AlecRecord.mov',
-            None,
-            None,
-            'C:\\Users\\SchwartzLab\\Desktop\\Testing_AlecRecord.tdms'
-]
+#default filepath
+#filepath = ['C:\\Users\\SchwartzLab\\Desktop\\Testing_Female2Record.mov',
+#            None,
+#            None,
+#            'C:\\Users\\SchwartzLab\\Desktop\\Testing_Female2Record.tdms'
+#]
+model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_first_try-Devon-2020-11-24\exported-models\DLC_Alec_first_try_resnet_50_iteration-0_shuffle-1'
+
 
 # this section is a placeholder
 # we will want to use the GUI to manage these settings
@@ -51,6 +56,9 @@ filepath = ['C:\\Users\\SchwartzLab\\Desktop\\Testing_AlecRecord.mov',
 def record_switch():
     ag.cameras[0].saving_switch_on()
     ag.nidaq.saving_switch_on()
+
+def dlc_switch():
+    ag.cameras[0].dlc_switch(model_path=model_path)
 
 def ex_calibration_switch():
     result = ag.cameras[0].extrinsic_calibration_switch()
@@ -71,33 +79,38 @@ def in_calibration_switch():
         data_type = 'multipart/x-mixed-replace; boundary=frame'
     return Response(result, mimetype=data_type)
 
+def get_filepath():
+    path=request.values['folderpath']
+    name=request.values['foldername']
+    nCamera=ag.nCameras
+    camera_list = []
+    for i in range(nCamera):
+        camera_list.append(ag.cameras[i].device_serial_number)
+    path = pop.reformat_filepath(path,name,camera_list)
+    ag.filepaths = path
+
 
 api_switch = {
+    'confirm and submit': get_filepath,
+    'start': lambda: ag.start(isDisplayed=True),
+    'trace': dlc_switch,
     'record': record_switch,
-    'start': lambda: ag.start(
-        filepaths=filepath, isDisplayed=True
-    ),
     'save and quit': ag.stop,
     'intrinsic_calibration': in_calibration_switch,
     'extrinsic_calibration': ex_calibration_switch
 }
-'''
-api_switch = {
-    'start_acquisition': lambda: ag.start(
-        filepaths=[None, 'C:\\Users\\SchwartzLab\\Desktop\\Testing_5000Hz.tdms'], isDisplayed=[True, True]
-    ),
-    'stop_acquisition': ag.stop,
-}
-'''
+
 
 @app.route('/api', methods=['GET','POST'])
 def apiRouter():
-  print(request.method)
-  if request.method == 'POST':
-    api_switch.get(request.form['action'])()
-    ag.run()
-
-  return redirect(url_for('index'), code=302)
+    # print(request.method)
+    if request.method == 'POST':
+        print(request.form['action'])
+        api_switch.get(request.form['action'])()
+        ag.run()
+    if request.method == 'GET':
+        api_switch.get(request.values['action'])()
+    return redirect(url_for('index'), code=302)
 
 # this is a placeholder, mimicking a post request using a get request
 # @app.route('/api/stop')
@@ -134,4 +147,4 @@ def index():
 
 
 if __name__ == '__main__':
-  app.run(host='127.0.0.1', port=3001, debug=True, use_reloader=False)
+  app.run(host='127.0.0.1', port=3001, debug=False, use_reloader=False)

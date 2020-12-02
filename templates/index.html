@@ -7,23 +7,38 @@
 
 <body>
 
-
+  <form action="/api" method="get" >
+    <p>Step 1: submit the saving path (leaving it alone will use the default saving path: C:\Users\SchwartzLab\Desktop\Date_Testing\</p>
+    C:\Users\SchwartzLab\ <input type="text" name="folderpath" placeholder="folder path"> \ <input type="text" name="foldername" placeholder="folder name"> \<br>
+    <input type="submit" name="action" value="confirm and submit"> <br>
+  </form>
   <form action="/api" method="post">
+    <p>Step 2: start the cameras and spectrogram for previewing</p>
     <input type="submit" name="action" value="start" />
   </form>
-    <form action="/api" method="post">
-    <input type="submit" name="action" value="record" />
+  <form action="/api" method="post">
+    <p>Step 3 (optional): use pre-trained DeepLabCut model to check the marked points</p>
+    <input type="submit" name="action" value="trace" />
   </form>
   <form action="/api" method="post">
-    <input type="submit" name="action" value="save and quit" />
-  </form>
-  <form action="/api" method="post">
+    <p>Step 3 (optional): perform intrinsic calibration for camera</p>
     <input type="submit" name="action" value="intrinsic_calibration" />
   </form>
   <form action="/api" method="post">
+    <p>Step 4 (optional): perform extrinsic calibration for camera</p>
     <input type="submit" name="action" value="extrinsic_calibration" />
   </form>
-  <img src='/video/0'style="width:768px; height:648px"/>
+  <form action="/api" method="post">
+    <p>Step 5: start recording</p>
+    <input type="submit" name="action" value="record" />
+  </form>
+  <form action="/api" method="post">
+    <p>Step 6: save the recorded file and quit</p>
+    <input type="submit" name="action" value="save and quit" />
+  </form>
+
+  <img src='/video/0' style="width:640px; height:540px"/>
+  <!--img src='/video/1' style="width:640px; height:540px"/>-->
   <!--  <div id="canvasContainer"></div>-->
   <img src='/audio' max-width="100%" max-height="100%" style="width:1280px; height:480px"/>
   <!--<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/2.3.1/socket.io.min.js"></script> -->

@@ -7,7 +7,7 @@ import scipy.io as sio
 
 sample_rate = 3e5
 
-# downsampling functions
+# turn tdms to np array
 def read_audio(path, raw_data_flag=False):
     dir_list = os.listdir(path)
     item_list = [path + item for item in dir_list if '.tdms' in item and '.tdms_index' not in item]
@@ -24,6 +24,7 @@ def read_audio(path, raw_data_flag=False):
             raw_data = None
         return data, raw_data
 
+# resampling
 def audio_resample(data:np.ndarray, old_samprate, new_samprate):
     new_sample_size = int(data.size * new_samprate/old_samprate)
     new_data = sig.resample(data, new_sample_size)
@@ -70,20 +71,23 @@ if __name__ == '__main__':
     GregVoice_path = 'C:\\Users\\SchwartzLab\\Desktop\\2020-10-29-GregVoice\\'
     AngryMouse_path = 'C:\\Users\\SchwartzLab\\Desktop\\2020-10-29-angry-female-mouse-held-close\\'
     AlecMusic_path = 'C:\\Users\\SchwartzLab\\Desktop\\AlecMusic_grounded_01VPa_316\\'
-    Testing_path = 'C:\\Users\\SchwartzLab\\Desktop\\Testing_5000Hz\\'
+    Testing_path = 'C:\\Users\\SchwartzLab\\Desktop\\2020-11-17-mom\\'
 
+    # get path
+    chosen_path = Testing_path
     # load data
-    data,_ = read_audio(path=AngryMouse_path)
+    data, _ = read_audio(path=chosen_path)
 
-    # Fs from 300kHz to 32kHz
-    resampled_data = audio_resample(data=data,old_samprate=sample_rate,new_samprate=3.2e4)
+    # downsampling: Fs from 300kHz to 32kHz
+    #resampled_data = audio_resample(data=data,old_samprate=sample_rate,new_samprate=3.2e4)
 
-    # from 90kHz to 30kHz is to rescale the frequency 0.3 times
+    # tone shifting from 90kHz to 30kHz is to rescale the frequency 0.3 times
     #shifted_data = DFT_pshift(data, 0.3, ms2smp(40, Fs=sample_rate))
     # or
     #shifted_resampled_data = DFT_pshift(resampled_data, 0.3, ms2smp(40, Fs=3.2e4))
 
-    sio.savemat(AngryMouse_path+'resampled.mat',{'data': resampled_data})
+    # specify
+    sio.savemat(chosen_path+'resampled.mat',{'momandpups': data})
 
 
 
