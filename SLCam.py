@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import ffmpeg
 import utils.calibration_utils as cau
+import utils.image_draw_utils as idu
 import os
 import toml
 import threading
@@ -198,6 +199,7 @@ class Camera:
 
     self._dlc = False
     self._save_dlc = False
+    self._dlc_count= None
     self.dlc_proc = None
     self.dlc_live = None
 
@@ -248,12 +250,13 @@ class Camera:
       self.dlc_proc = Processor()
       if model_path:
         # TODO: displays should be False
-        self.dlc_live = DLCLive(model_path=model_path,processor=self.dlc_proc,display=True)
-      self._dlc = True
+        self.dlc_live = DLCLive(model_path=model_path,processor=self.dlc_proc,display=False)
+        self._dlc = True
+        self._dlc_count = 1
     else:
       self.dlc_live.close()
       self._dlc = False
-
+      self._dlc_count = None
 
   def stop(self):
     with self._running_lock:
@@ -304,8 +307,12 @@ class Camera:
       self.extrinsic_calibration(frame)
 
     if self._dlc:
-      self.dlc_live.init_inference(frame)
+      if self._dlc_count:
+        self.dlc_live.init_inference(frame)
+        self._dlc_count = None
       self.dlc_live.get_pose(frame)
+      pose=self.dlc_live.pose
+      idu.draw_dots(frame,pose)
 
     if self._displaying:
       # acquire lock on frame

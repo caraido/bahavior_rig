@@ -76,6 +76,3 @@ def reformat_filepath(path,name,camera:list):
 	audio_filepath = full_path+'/'+'audio.tdms'
 	filepaths.append(audio_filepath)
 	return filepaths
-
-def check_dlc_model_path(path):
-	pass
