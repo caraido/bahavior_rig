@@ -2,6 +2,7 @@ import cv2
 import PySpin
 import numpy as np
 from scipy import signal, interpolate
+from scipy import io as sio
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import ffmpeg
@@ -17,6 +18,7 @@ from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 import time
 import pandas as pd
 from dlclive import DLCLive, Processor
+from audio_processing import read_audio
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 
@@ -250,7 +252,7 @@ class Camera:
       self.dlc_proc = Processor()
       if model_path:
         # TODO: displays should be False
-        self.dlc_live = DLCLive(model_path=model_path,processor=self.dlc_proc,display=False)
+        self.dlc_live = DLCLive(model_path=model_path,processor=self.dlc_proc,display=False,resize=0.6)
         self._dlc = True
         self._dlc_count = 1
     else:
@@ -310,9 +312,10 @@ class Camera:
       if self._dlc_count:
         self.dlc_live.init_inference(frame)
         self._dlc_count = None
-      self.dlc_live.get_pose(frame)
-      pose=self.dlc_live.pose
-      idu.draw_dots(frame,pose)
+      if self.frame_count%3 == 0:
+        self.dlc_live.get_pose(frame)
+        pose=self.dlc_live.pose
+        idu.draw_dots(frame,pose)
 
     if self._displaying:
       # acquire lock on frame
@@ -548,6 +551,9 @@ class Nidaq:
         self.audio.ai_channels.add_ai_voltage_chan(
             "Dev1/ai1"
         )  # this channel measures the audio signal
+
+        # self.audio.ai_channels.ai_microphone_sensitivity=100 # doesn't know if it works
+        self.audio.ai_channels['Dev1/ai1'].ai_gain= 10000
         self.audio.timing.cfg_samp_clk_timing(
             self.sample_rate, sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS
         )
@@ -641,7 +647,7 @@ class Nidaq:
       self.data = [np.ndarray(shape=(self._read_size))
                    for i in range(self._nBuffers)]
 
-  def capture(self, read_count):
+  def capture(self,read_count):
     if self._displaying:
       # we will save the samples to self.data
 
@@ -750,6 +756,8 @@ class Nidaq:
         self._saving = False
         print('stopped nidaq')
 
+
+
   def __del__(self):
     self.stop()
 
@@ -808,6 +816,10 @@ class AcquisitionGroup:
     for cam in self.cameras:
       cam.stop()
     self.nidaq.stop()  # make sure cameras are stopped before stopping triggers
+    # save .mat
+    #audio = read_audio(self.filepaths[-1])
+    #sio.savemat(self.filepaths[-1] + 'audio.mat', {'audio': audio, 'sample_rate': self.nidaq.sample_rate})
+    #print('save nidaq')
     os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
     os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms_index')
 
@@ -821,7 +833,7 @@ class AcquisitionGroup:
 
 if __name__ == '__main__':
   ag = AcquisitionGroup()
-  ag.start(isDisplayed=[True, False])
+  ag.start()
   ag.run()
 
 # if __name__ == '__main__':

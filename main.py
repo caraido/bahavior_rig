@@ -8,8 +8,8 @@ from utils import path_operation_utils as pop
 audio_settings = {
     'fs': 3e5,  # sample rate
     'fMin': 200,
-    'fMax': 80000,
-    'nFreq': 5e3,  # number of frequencies to plot
+    'fMax': 40000,
+    'nFreq': 1e2,  # number of frequencies to plot
     'fScale': 'log',  # frequency spacing, linear or log
     'window': .0032,  # length of window in seconds
     'overlap': .875,  # fractional overlap

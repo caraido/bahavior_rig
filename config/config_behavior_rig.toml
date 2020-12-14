@@ -1,0 +1,13 @@
+#outer_r = 5.3
+outer_r_ = 6.693
+inner_r = 3.0
+board_size = 0.787
+unit = 'inch'
+
+recorded_center = [562,437] # manually added
+window_A= [[454,801],[667,807]]
+window_B= [[934,352], [832,169]]
+window_C= [[308,159], [195,340]]
+
+
+
