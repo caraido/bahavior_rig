@@ -378,8 +378,6 @@ class Camera:
       #   pose = self.dlc_live.pose
       #   idu.draw_dots(frame, pose)
 
-      self.frame = frame  # if we're keeping track of frames, it will get written
-
       im.Release()
       yield frame
 
@@ -543,7 +541,7 @@ class Camera:
       self.ex_calib.decimator += 1
 
   def run(self):  # repeatedly calls self.capture() while self.running
-    self._has_runner = True #register the runner
+    self._has_runner = True  # register the runner
 
     last_frame = np.empty(self.size)
     capture = self.capture()  # returns a generator function, can call .next() method
@@ -559,12 +557,13 @@ class Camera:
           last_frame_time = time.time()
           last_frame = capture.next()
         else:
-          self._has_runner = False #deregister the runner
+          self._has_runner = False  # deregister the runner
           return
       if last_frame is not None:
         with self._file_lock:
           if self._file is not None:
             self.save(last_frame)
+        self.frame = last_frame  # write the frame to the instance buffer
 
   def __del__(self):
     self.stop()
