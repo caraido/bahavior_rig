@@ -180,6 +180,7 @@ class Camera:
     self._spincam.TriggerMode.SetValue(PySpin.TriggerMode_On)
 
     self.frame_rate = frame_rate
+    self._interval = (1 / self.frame_rate) - BUFFER_TIME
 
     self.device_serial_number, self.height, self.width = self.get_camera_properties()
     self.size = (self.width, self.height)
@@ -363,11 +364,13 @@ class Camera:
 
       # TODO: check this and move to run_dlc() function running on separate process
       # last_count = 0
+      # last_frame_time = time.time() - self._interval
       # while True:
-      #   sleep(time_between_frames_minus_buffer) #check self.run()
+      #   self.sleep(last_frame_time)
       #   frame_count, count = self.frame_and_count
       #   if frame is not None and count > last_count:
       #     last_count = frame_count
+      #     last_frame_time = time.time()
       #     with self._dlc_lock:
       #       if self._dlc_count: do init and update count
       #       if not frame_count % DLC_UPDATE_EACH:
@@ -462,15 +465,17 @@ class Camera:
     frame_bytes = BytesIO()
     last_count = 0
     frame, frame_count = self.frame_and_count
+    last_frame_time = time.time() - self._interval
     while frame is not None:
       # TODO: draw on the frame, using e.g. self._pose and self.ex_calib, etc.
-      if frame_count > last_count:  # display the frame if it's new ~ might run into issues here?
+      if frame_count > last_count:  # display the frame if it's new
         last_count = frame_count
+        last_frame_time = time.time()
         frame_bytes.seek(0)  # go to the beginning of the buffer
         Image.fromarray(frame).save(frame_bytes, 'bmp')
         yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_bytes.getvalue() + b'\r\n')
       else:
-        pass  # TODO: sleep, just as in self.run()
+        self.sleep(last_frame_time)
       frame, frame_count = self.frame_and_count
 
   def extrinsic_calibration(self, frame):
@@ -552,13 +557,9 @@ class Camera:
 
     last_frame = np.empty(self.size)
     capture = self.capture()  # returns a generator function, can call .next() method
-    last_frame_time = 0
-    # we will wait a bit less than the interval between frames
-    interval = (1 / self.frame_rate) - BUFFER_TIME
+    last_frame_time = time.time() - self._interval
     while True:
-      pause_time = last_frame_time + interval - time.time()
-      if pause_time > 0:
-        time.sleep(pause_time)
+      self.sleep(last_frame_time)
       is_running, last_frame_time, last_frame = self.running(capture)
       if not is_running:
         self._has_runner = False
@@ -569,10 +570,18 @@ class Camera:
           self.save(last_frame)
       self.frame = last_frame  # write the frame to the instance buffer
 
+  def sleep(self, since):
+    # current_time - previous_time === time_elapsed
+    # self._interval - time_elapsed === pause_time
+    pause_time = since + self._interval - time.time()
+    if pause_time > 0:
+      time.sleep(pause_time)
+
   def __del__(self):
     self.stop()
     while self._has_runner:
-      pass  # TODO: sleep just as in self.run
+      last_check_time = time.time()
+      self.sleep(last_check_time)
     self._spincam.DeInit()
 
 
