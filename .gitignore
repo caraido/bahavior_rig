@@ -1,7 +1,5 @@
 .vscode
-client/node_modules
-server/static/react
-
-server/templates/index.html
+node_modules/
+react/
 
 *.pyc

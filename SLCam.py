@@ -126,11 +126,10 @@ class Calib:
             self.config['ids'] = cau.reformat(self.config['ids'])
             self.config['corners'] = cau.reformat(self.config['corners'])
             markers = pd.DataFrame({'truecorners': list(self.config['corners'])},
-                                                  index=list(self.config['ids']))
+                                   index=list(self.config['ids']))
             self.config['markers'] = markers
           except ValueError:
             print("there's nothing in the configuration file called ids! Please check.")
-
 
   def save_config(self, camera_serial_number, width, height):
     save_path = self.save_path + camera_serial_number + '.toml'
@@ -144,14 +143,14 @@ class Calib:
                                     width,
                                     height)
         param['camera_serial_number'] = camera_serial_number
-        if len(param)>1:
+        if len(param) > 1:
           with open(save_path, 'w') as f:
             toml.dump(param, f)
           print('intrinsic calibration configuration saved!')
         else:
           print("intrinsic calibration configuration NOT saved due to lack of markers.")
       else:
-        if self.allIds is not None and not len(self.allIds)<self.max_size+1:
+        if self.allIds is not None and not len(self.allIds) < self.max_size+1:
           param = {'corners': np.array(self.allCorners),
                    'ids': np.array(self.allIds), 'CI': 5,
                    'camera_serial_number': camera_serial_number}
@@ -160,7 +159,8 @@ class Calib:
             print('extrinsic calibration configuration saved!')
         else:
           # TODO: should be a pop up window/show up on the screen
-          raise Exception("failed to record all Ids! can't save configuration. Please calibrate again.")
+          raise Exception(
+              "failed to record all Ids! can't save configuration. Please calibrate again.")
 
 
 class Camera:
@@ -178,7 +178,7 @@ class Camera:
 
     self.frame_rate = frame_rate
 
-    self.device_serial_number, self.height, self.width = self.get_camera_property()
+    self.device_serial_number, self.height, self.width = self.get_camera_properties()
     self.in_calib = Calib('intrinsic')
     self.ex_calib = Calib('extrinsic')
 
@@ -191,6 +191,7 @@ class Camera:
     self.file = None
 
     self._displaying = False
+    #TODO: self._displaying_lock
     self.frame = None
     self.frame_count = 0
     self._frame_lock = threading.Lock()
@@ -201,14 +202,13 @@ class Camera:
 
     self._dlc = False
     self._save_dlc = False
-    self._dlc_count= None
+    self._dlc_count = None
     self.dlc_proc = None
     self.dlc_live = None
 
-
   def start(self, filepath=None, display=False):
     if filepath:
-      #self._saving = True
+      self._saving = True
 
       # we will assume hevc for now
       # will also assume 30fps
@@ -219,15 +219,12 @@ class Camera:
           .overwrite_output() \
           .run_async(pipe_stdin=True)
 
-    #else:
-    #  self._saving = False
+      # TODO: should self._saving be true??
 
     self.frame_count = 0
 
-    if display:
-      self._displaying = True
-    else:
-      self._displaying = False
+    # TODO: with self._displaying_lock:
+    self._displaying = display
 
     with self._running_lock:
       if not self._running:
@@ -247,12 +244,13 @@ class Camera:
       del self.file
       self.file = None
 
-  def dlc_switch(self,model_path=None):
+  def dlc_switch(self, model_path=None):
     if not self._dlc:
       self.dlc_proc = Processor()
       if model_path:
         # TODO: displays should be False
-        self.dlc_live = DLCLive(model_path=model_path,processor=self.dlc_proc,display=False,resize=0.6)
+        self.dlc_live = DLCLive(
+            model_path=model_path, processor=self.dlc_proc, display=False, resize=0.6)
         self._dlc = True
         self._dlc_count = 1
     else:
@@ -272,15 +270,18 @@ class Camera:
           self.file = None
         # cv2.destroyAllWindows() #this appears to be causing errors?
         self._running = False
+
         self._displaying = False
+        # TODO:replace with: _running = True
+
+        # TODO: remove this
         self.dlc_switch()
 
-        self._spincam.EndAcquisition()
-        self._spincam.DeInit()
-
         print(f'stopped camera {self.device_serial_number}')
+    # TODO: if _running: with self._displaying_lock: self._displaying = False
 
   def capture(self):
+    # TODO: move the timeout length to the top
     im = self._spincam.GetNextImage(100)
 
     # parse to make sure that image is complete....
@@ -293,7 +294,7 @@ class Camera:
     if self._saving:
       self.save(frame)
       text = 'recording...'
-      cv2.putText(frame, text, (700,50),
+      cv2.putText(frame, text, (700, 50),
                   cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
 
     # check calibration status
@@ -312,25 +313,26 @@ class Camera:
       if self._dlc_count:
         self.dlc_live.init_inference(frame)
         self._dlc_count = None
-      if self.frame_count%3 == 0:
+      if self.frame_count % 3 == 0: #TODO: make this 3 a constant at top of file
         self.dlc_live.get_pose(frame)
-        pose=self.dlc_live.pose
-        idu.draw_dots(frame,pose)
+        pose = self.dlc_live.pose
+        idu.draw_dots(frame, pose)
 
+    # TODO: acquire the _displaying_lock, but don't nest the locks
     if self._displaying:
       # acquire lock on frame
       with self._frame_lock:
         self.frame = frame
         self.frame_count += 1
         # TODO: this part should not be commented?
-        self.display()
+        # self.display()
 
     im.Release()
 
   def save(self, frame):
     self.file.stdin.write(frame.tobytes())
 
-  def get_camera_property(self):
+  def get_camera_properties(self):
     nodemap_tldevice = self._spincam.GetTLDeviceNodeMap()
     device_serial_number = PySpin.CStringPtr(
         nodemap_tldevice.GetNode('DeviceSerialNumber')).GetValue()
@@ -340,6 +342,7 @@ class Camera:
     return device_serial_number, height, width
 
   def intrinsic_calibration_switch(self):
+    # TODO: with self._displaying_lock:
     if self._displaying:
       if not self._in_calibrating:
         print('turning ON intrinsic calibration mode')
@@ -367,7 +370,7 @@ class Camera:
         self.ex_calib.save_config(self.device_serial_number,
                                   self.width,
                                   self.height)
-      return self.display()
+      # return self.display()
 
   def intrinsic_calibration(self, frame):
     # write something on the frame
@@ -376,7 +379,7 @@ class Camera:
                 cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 125), 2)
 
     # get corners and refine them in openCV for every 3 frames
-    if self.in_calib.decimator % 3 == 0:
+    if self.in_calib.decimator % 3 == 0: #TODO: move 3 to a constant at top of file
       corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
           frame, self.in_calib.board.dictionary, parameters=self.in_calib.params)
       detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
@@ -416,7 +419,7 @@ class Camera:
                   cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
       # calibrate every 3 frames
-      if self.ex_calib.decimator % 3 == 0:
+      if self.ex_calib.decimator % 3 == 0: #TODO: move to constant at top of file
         # get parameters
         params = self.ex_calib.params
 
@@ -435,7 +438,7 @@ class Camera:
       cv2.putText(frame, text, (50, 50),
                   cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
-      if True: #self.ex_calib.decimator % 3 == 0:
+      if True:  # self.ex_calib.decimator % 3 == 0:
         truecorners = self.ex_calib.config['corners']  # float numbers
         trueids = self.ex_calib.config['ids']  # int numbers
         CI = self.ex_calib.config['CI']  # int pixels
@@ -449,19 +452,23 @@ class Camera:
         if cau.check_ids(ids) and cau.check_corners(corners):
 
           # check if aligned:
-          aligns, colors = cau.get_align_color(ids,corners, trueids,truecorners,CI)
+          aligns, colors = cau.get_align_color(
+              ids, corners, trueids, truecorners, CI)
 
-          markers['aligns'] = pd.Series(aligns,index=list(map(str,cau.reformat(ids))))
-          markers['colors'] = pd.Series(colors,index=list(map(str,cau.reformat(ids))))
+          markers['aligns'] = pd.Series(
+              aligns, index=list(map(str, cau.reformat(ids))))
+          markers['colors'] = pd.Series(
+              colors, index=list(map(str, cau.reformat(ids))))
 
           # any way to make it more concise?
-          for tid,truecorner in zip(trueids,truecorners):
-            real_color = int(markers['colors'][tid]) if pd.notna(markers['colors'][tid]) else 200
-            point1 = tuple(np.array(truecorner[0],np.int))
-            point2 = tuple(np.array(truecorner[1],np.int))
-            point3 = tuple(np.array(truecorner[2],np.int))
-            point4 = tuple(np.array(truecorner[3],np.int))
-            cv2.line(frame,point1,point2,color=real_color, thickness=CI*2)
+          for tid, truecorner in zip(trueids, truecorners):
+            real_color = int(markers['colors'][tid]) if pd.notna(
+                markers['colors'][tid]) else 200
+            point1 = tuple(np.array(truecorner[0], np.int))
+            point2 = tuple(np.array(truecorner[1], np.int))
+            point3 = tuple(np.array(truecorner[2], np.int))
+            point4 = tuple(np.array(truecorner[3], np.int))
+            cv2.line(frame, point1, point2, color=real_color, thickness=CI*2)
             cv2.line(frame, point2, point3, color=real_color, thickness=CI*2)
             cv2.line(frame, point3, point4, color=real_color, thickness=CI*2)
             cv2.line(frame, point4, point1, color=real_color, thickness=CI*2)
@@ -470,10 +477,12 @@ class Camera:
 
           if all(aligns):
             text = 'Enough corners aligned! Ready to go'
-            cv2.putText(frame, text, (500, 1000), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+            cv2.putText(frame, text, (500, 1000),
+                        cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
           else:
             text = "Missing ids or corners!"
-            cv2.putText(frame, text, (500, 1000), cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+            cv2.putText(frame, text, (500, 1000),
+                        cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
       self.ex_calib.decimator += 1
 
   def run(self):
@@ -489,13 +498,17 @@ class Camera:
         if self._running:
           last = time.time()
           self.capture()
+          # self.display()  # maybe this happens in a different thread
         else:
           flag = True
+          # return ?
       if flag:
         return
 
   def __del__(self):
     self.stop()
+    self._spincam.EndAcquisition()
+    self._spincam.DeInit()
 
 
 class Nidaq:
@@ -509,7 +522,8 @@ class Nidaq:
     self.sample_rate = int(audio_settings['fs'])
     self.trigger_freq = frame_rate
     self.duty_cycle = .01
-    self.read_rate = audio_settings['readRate']  # in Hz, depends on PC buffer size...
+    # in Hz, depends on PC buffer size...
+    self.read_rate = audio_settings['readRate']
     self._read_size = self.sample_rate // self.read_rate
     self.read_count = 0
 
@@ -521,23 +535,27 @@ class Nidaq:
     self.filepath = None
     self.log_mode = nidaqmx.constants.LoggingMode.LOG_AND_READ
 
-    ## for display
+    # for display
     self._nfft = int(audio_settings['nFreq'])
     self._window = int(audio_settings['window'] * self.sample_rate)
     self._overlap = int(audio_settings['overlap'] * self._window)
-    self._nx = int(np.floor(self.sample_rate-self._overlap)/(self._window-self._overlap))
+    self._nx = int(np.floor(self.sample_rate-self._overlap) /
+                   (self._window-self._overlap))
 
     # number of calculated timepoints
     self._xq = np.linspace(0, 1, num=self._nx)
 
     # number of frequency points
-    self._yq = np.linspace(0, int(self.sample_rate/2), num=int(self._window/2 + 1))
+    self._yq = np.linspace(0, int(self.sample_rate/2),
+                           num=int(self._window/2 + 1))
 
     # we will use scip.interpolate to convert yq to zq
-    if audio_settings['fScale']=='linear':
-      self._zq = np.linspace(int(audio_settings['fMin']), int(audio_settings['fMax']), num=int(audio_settings['nFreq']))
+    if audio_settings['fScale'] == 'linear':
+      self._zq = np.linspace(int(audio_settings['fMin']), int(
+          audio_settings['fMax']), num=int(audio_settings['nFreq']))
     else:
-      self._zq = np.logspace(int(np.log10(audio_settings['fMin'])), int(np.log10(audio_settings['fMax'])), num=int(audio_settings['nFreq']))
+      self._zq = np.logspace(int(np.log10(audio_settings['fMin'])), int(
+          np.log10(audio_settings['fMax'])), num=int(audio_settings['nFreq']))
 
     self._freq_correct = audio_settings['correction']
 
@@ -553,7 +571,7 @@ class Nidaq:
         )  # this channel measures the audio signal
 
         # self.audio.ai_channels.ai_microphone_sensitivity=100 # doesn't know if it works
-        self.audio.ai_channels['Dev1/ai1'].ai_gain= 10000
+        self.audio.ai_channels['Dev1/ai1'].ai_gain = 10000
         self.audio.timing.cfg_samp_clk_timing(
             self.sample_rate, sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS
         )
@@ -586,9 +604,9 @@ class Nidaq:
           self.log_mode = nidaqmx.constants.LoggingMode.LOG
 
         self.audio.in_stream.configure_logging(
-          'C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms',
-          logging_mode=self.log_mode,
-          operation=nidaqmx.constants.LoggingOperation.CREATE_OR_REPLACE)  # see nptdms
+            'C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms',
+            logging_mode=self.log_mode,
+            operation=nidaqmx.constants.LoggingOperation.CREATE_OR_REPLACE)  # see nptdms
         '''
         if filepath:
           self._saving = True
@@ -601,8 +619,8 @@ class Nidaq:
           self.audio.in_stream.configure_logging(
               '', logging_mode=nidaqmx.constants.LoggingMode.OFF)  # not sure if this works
         '''
-        self._saving=False
-        self.filepath=filepath
+        self._saving = False
+        self.filepath = filepath
 
         # trigger task
         self.trigger = nidaqmx.Task()
@@ -627,27 +645,27 @@ class Nidaq:
 
   def saving_switch_on(self):
     if not self._saving:
-      self._saving=True
+      self._saving = True
       if self.filepath:
         self.audio.in_stream.start_new_file(self.filepath)
       else:
         # TODO: will set a default path to save
         raise FileNotFoundError("file path is not found!")
-    #else:
+    # else:
     #  self._saving=False
     #  self.audio.in_stream.logging_mode = nidaqmx.constants.LoggingMode.OFF
 
   def display_switch_on(self):
     if not self._displaying:
-      self._displaying=True
+      self._displaying = True
       self._audio_reader = AnalogReader(
-        self.audio.in_stream)
+          self.audio.in_stream)
       self._read_size = self.sample_rate // self.read_rate
 
       self.data = [np.ndarray(shape=(self._read_size))
                    for i in range(self._nBuffers)]
 
-  def capture(self,read_count):
+  def capture(self, read_count):
     if self._displaying:
       # we will save the samples to self.data
 
@@ -702,23 +720,25 @@ class Nidaq:
               self.read_count-1) % self._nBuffers], self.sample_rate, nperseg=self._window, noverlap=self._overlap)
 
           # print(self._xq.shape, self._yq.shape, spectrogram.shape, self._zq.shape)
-          respect = interpolate.RectBivariateSpline(self._yq, self._xq, spectrogram)(self._zq, self._xq)
+          respect = interpolate.RectBivariateSpline(
+              self._yq, self._xq, spectrogram)(self._zq, self._xq)
 
           if self._freq_correct == True:
-            respect *= self._zq[:,np.newaxis]
-            #corrects for 1/f noise by multiplying with f
+            respect *= self._zq[:, np.newaxis]
+            # corrects for 1/f noise by multiplying with f
 
-          thisMin = np.amin(respect, axis=(0,1))
+          thisMin = np.amin(respect, axis=(0, 1))
           respect -= thisMin
 
-          thisMax = np.amax(respect, axis=(0,1))
+          thisMax = np.amax(respect, axis=(0, 1))
 
-          respect /= thisMax #normalized to [0,1]
+          respect /= thisMax  # normalized to [0,1]
 
-          respect = mpl.cm.viridis(respect) * 255 #colormap
+          respect = mpl.cm.viridis(respect) * 255  # colormap
 
           self._frame_bytes.seek(0)  # go to the beginning of the buffer
-          Image.fromarray(respect.astype(np.uint8)).save(self._frame_bytes, 'bmp')
+          Image.fromarray(respect.astype(np.uint8)).save(
+              self._frame_bytes, 'bmp')
           yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n'
           # socket.emit('fft', {'s': respect.flatten('F').tolist()})
 
@@ -756,8 +776,6 @@ class Nidaq:
         self._saving = False
         print('stopped nidaq')
 
-
-
   def __del__(self):
     self.stop()
 
@@ -772,7 +790,7 @@ class AcquisitionGroup:
     self.nidaq = Nidaq(frame_rate, audio_settings)
 
     self._runners = []
-    self.filepaths=None
+    self.filepaths = None
 
   def start(self, isDisplayed=True):
     if not self.filepaths:
@@ -780,14 +798,14 @@ class AcquisitionGroup:
     if not isDisplayed:
       isDisplayed = [False] * (self.nCameras + 1)
 
-    if not isinstance(isDisplayed,list) or len(isDisplayed)==1:
+    if not isinstance(isDisplayed, list) or len(isDisplayed) == 1:
       isDisplayed = [isDisplayed] * (self.nCameras + 1)
 
-    print('detected %d cameras'%self.nCameras)
+    print('detected %d cameras' % self.nCameras)
 
     for cam, fp, disp in zip(self.cameras, self.filepaths[: -1], isDisplayed[: -1]):
       cam.start(filepath=fp, display=disp)
-      print('starting camera '+ cam.device_serial_number)
+      print('starting camera ' + cam.device_serial_number)
 
     # once the camera BeginAcquisition methods are called, we can start triggering
     self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
@@ -795,7 +813,7 @@ class AcquisitionGroup:
 
   def run(self):
     # begin gathering samples
-    if not self._runners:
+    if not self._runners:  # if self._runners == []
       for i, cam in enumerate(self.cameras):
         self._runners.append(threading.Thread(target=cam.run))
         self._runners[i].start()
@@ -816,10 +834,7 @@ class AcquisitionGroup:
     for cam in self.cameras:
       cam.stop()
     self.nidaq.stop()  # make sure cameras are stopped before stopping triggers
-    # save .mat
-    #audio = read_audio(self.filepaths[-1])
-    #sio.savemat(self.filepaths[-1] + 'audio.mat', {'audio': audio, 'sample_rate': self.nidaq.sample_rate})
-    #print('save nidaq')
+
     os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
     os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms_index')
 
@@ -835,22 +850,3 @@ if __name__ == '__main__':
   ag = AcquisitionGroup()
   ag.start()
   ag.run()
-
-# if __name__ == '__main__':
-#      board = CharucoBoard(6,2)
-#      #board.save_board(2000)
-#      cg = AcquisitionGroup()
-#
-#      for i, cam in enumerate(cg.cameras):
-#          # cam.start(filepath=f'testing{i:02d}.mov')
-#          cam.start(display=True)
-#
-#      for j in range(500):
-#          for i, cam in enumerate(cg.cameras):
-#              cam.capture()
-#      for i, cam in enumerate(cg.cameras):
-#          cam.stop()
-#
-#      del cg
-#     #for i, cam in enumerate(cg.cameras):
-#     #   cam.stop()
