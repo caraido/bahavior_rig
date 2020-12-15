@@ -21,6 +21,9 @@ from dlclive import DLCLive, Processor
 from audio_processing import read_audio
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
+FRAME_TIMEOUT = 100  # time in milliseconds to wait for pyspin to retrieve the frame
+DLC_RESIZE = 0.6  # resize the frame by this factor for DLC
+DLC_UPDATE_EACH = 3  # frame interval for DLC update
 
 
 class CharucoBoard:
@@ -179,158 +182,209 @@ class Camera:
     self.frame_rate = frame_rate
 
     self.device_serial_number, self.height, self.width = self.get_camera_properties()
+    self.size = (self.width, self.height)
+
     self.in_calib = Calib('intrinsic')
     self.ex_calib = Calib('extrinsic')
 
-    self._start = False
-
-    self._running = False
     self._running_lock = threading.Lock()
+    self.running = False
 
-    self._saving = False
+    self._file_lock = threading.Lock()
     self.file = None
 
-    self._displaying = False
-    #TODO: self._displaying_lock
-    self.frame = None
-    self.frame_count = 0
     self._frame_lock = threading.Lock()
-    self._frame_bytes = BytesIO()
+    self.frame = None
 
     self._in_calibrating = False
     self._ex_calibrating = False
 
-    self._dlc = False
-    self._save_dlc = False
-    self._dlc_count = None
-    self.dlc_proc = None
-    self.dlc_live = None
+    self._has_runner = False
 
-  def start(self, filepath=None, display=False):
-    if filepath:
-      self._saving = True
+    self._dlc_lock = threading.Lock()
+    self.dlc = False
+    # self._save_dlc = False
+    # self._dlc_count = None
+    # self.dlc_proc = None
+    # self.dlc_live = None
 
-      # we will assume hevc for now
-      # will also assume 30fps
-      # '1280x1024' can be replaced by self.width and self.height
-      self.file = ffmpeg \
-          .input('pipe:', format='rawvideo', pix_fmt='gray', s='1280x1024') \
-          .output(filepath, vcodec='libx265') \
-          .overwrite_output() \
-          .run_async(pipe_stdin=True)
+  # NOTE: a property accessed by multiple threads may need a lock, if the property guarantees another
+  # these include [method | threads | guarantee]:
+  #   self.running  | main and runner                   | tells whether spincam is running
+  #   self.file     | main and runner                   | tells whether ffmpeg file is open
+  #   self.frame    | main, runner, display, calib, dlc | frame can be read/written without collision if exists
+  #   self.dlc      | main, dlc                         | tells whether dlc objects exist
 
-      # TODO: should self._saving be true??
-
-    self.frame_count = 0
-
-    # TODO: with self._displaying_lock:
-    self._displaying = display
-
+  @property
+  def running(self):
     with self._running_lock:
-      if not self._running:
-        self._running = True
+      return self._running
+
+  @running.setter
+  def running(self, running):
+    if running:
+      with self._running_lock:
+        # may need to check first that self._running is false, but slower
         self._spincam.BeginAcquisition()
-
-  def saving_switch_on(self):
-    if not self._saving:
-      if self.file is not None:
-        self._saving = True
-      else:
-        raise FileNotFoundError("file path is not found!")
+        self._running = True
     else:
-      self._saving = False
-      self.file.stdin.close()
-      self.file.wait()
-      del self.file
-      self.file = None
+      with self._running_lock:
+        self._spincam.EndAcquisition()
+        self._running = False
 
-  def dlc_switch(self, model_path=None):
-    if not self._dlc:
-      self.dlc_proc = Processor()
-      if model_path:
-        # TODO: displays should be False
-        self.dlc_live = DLCLive(
-            model_path=model_path, processor=self.dlc_proc, display=False, resize=0.6)
-        self._dlc = True
-        self._dlc_count = 1
+  @property
+  def file(self):
+    with self._file_lock:
+      return self._file
+
+  @file.setter
+  def file(self, filepath):
+    if filepath:
+      with self._file_lock:
+        self._file = ffmpeg \
+            .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}') \
+            .output(filepath, vcodec='libx265') \
+            .overwrite_output() \
+            .run_async(pipe_stdin=True)
     else:
-      self.dlc_live.close()
-      self._dlc = False
-      self._dlc_count = None
-
-  def stop(self):
-    with self._running_lock:
-      if self._running:
-        if self._saving:
-          self._saving = False
-          # self.file.release()
+      with self._file_lock:
+        if self._file is not None:
           self.file.stdin.close()
           self.file.wait()
           del self.file
           self.file = None
-        # cv2.destroyAllWindows() #this appears to be causing errors?
-        self._running = False
 
-        self._displaying = False
-        # TODO:replace with: _running = True
+  @property
+  def frame(self):
+    with self._frame_lock:
+      return self._frame
 
-        # TODO: remove this
-        self.dlc_switch()
+  @property
+  def frame_count(self):
+    with self._frame_lock:
+      return self._frame_count
 
-        print(f'stopped camera {self.device_serial_number}')
-    # TODO: if _running: with self._displaying_lock: self._displaying = False
+  @property
+  def frame_and_count(self):
+    with self._frame_lock:
+      return self._frame, self._frame_count
+
+  @frame.setter
+  def frame(self, frame):
+    if isinstance(frame, bool):
+      if frame:
+        with self._frame_lock:
+          self._frame = np.empty(self.size)
+          self._frame_count = 0
+      else:
+        with self._frame_lock:
+          self._frame = None
+          self._frame_count = 0
+    else:
+      with self._frame_lock:
+        if self._frame is not None:
+          self._frame = frame
+          self._frame_count += 1
+
+  @property
+  def dlc(self):
+    with self._dlc_lock:
+      if self._dlc:
+        return self._dlc_live
+      else:
+        return False
+
+  @dlc.setter  # usage: to turn on, call self.dlc = modelpath ; to turn off, call self.dlc = False
+  def dlc(self, modelpath):
+    if modelpath:
+      with self._dlc_lock:
+        # TODO: if any of these functions are slow, then call them outside of the lock and reassign them to member variables inside the lock
+        # TODO: do we need to check if self._dlc is already true? if so, do we close the existing one and make a new one with the new model path???
+        self._dlc_proc = Processor()
+        self._dlc_live = DLCLive(
+            model_path=modelpath, processor=self._dlc_proc, display=False, resize=DLC_RESIZE)
+        self._dlc_count = 1  # TODO: is this actually a count?
+        self._dlc = True
+    else:
+      with self._dlc_lock:
+        self._dlc_proc = None
+        self._dlc_live.close()
+        # TODO: is this actually a count? or a boolean (if so should be true/false)?
+        self._dlc_count = None
+        self._dlc = False
+
+  def start(self, filepath=None, display=False):
+    self.file = filepath
+    self.frame = display  # we will start storing frames
+    self.running = True
+
+  def stop(self):
+    self.running = False
+    self.file = False
+    self.frame = False
+    self.dlc = False
 
   def capture(self):
-    # TODO: move the timeout length to the top
-    im = self._spincam.GetNextImage(100)
+    frame = np.empty(self.size)  # preallocate, should speed up a bit
+    while True:
+      # get the image from spinview
+      im = self._spincam.GetNextImage(FRAME_TIMEOUT)
+      if im.IsIncomplete():
+        status = im.GetImageStatus()
+        im.Release()
+        raise Exception(f"Image incomplete with image status {status} ...")
+      # frame = np.reshape(im.GetData(), self.size)
+      frame = im.GetNDArray()  # TODO: check that this works!!
 
-    # parse to make sure that image is complete....
-    if im.IsIncomplete():
-      status = im.GetImageStatus()
+      # TODO: move this to self.display()
+      # text = 'recording...'
+      # cv2.putText(frame, text, (700, 50),
+      #             cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
+
+      # TODO: move calibration stuff to own function running on separate process, accessing self.frame
+      # check calibration status
+      # if self._in_calibrating and self._ex_calibrating:
+      #   raise Warning('Only one type of calibration can be turned on!')
+
+      # # intrinsic calibration
+      # if self._in_calibrating and not self._ex_calibrating:
+      #   self.intrinsic_calibration(frame)
+
+      # # extrinsic calibration
+      # if self._ex_calibrating and not self._in_calibrating:
+      #   self.extrinsic_calibration(frame)
+
+      # TODO: check this and move to run_dlc() function running on separate process
+      # last_count = 0
+      # while True:
+      #   sleep(time_between_frames_minus_buffer) #check self.run()
+      #   frame_count, count = self.frame_and_count
+      #   if frame is not None and count > last_count:
+      #     last_count = frame_count
+      #     with self._dlc_lock:
+      #       if self._dlc_count: do init and update count
+      #       if not frame_count % DLC_UPDATE_EACH:
+      #         self.dlc_live.get_pose(frame) #is this synchronous?
+      #         self.last_pose = self.dlc_live.pose
+      #    elif frame is None or not self.dlc: #double check this logic
+      #       return
+
+      # old:
+      # if self._dlc_count:
+      #   self.dlc_live.init_inference(frame)
+      #   self._dlc_count = None
+      # if self.frame_count % 3 == 0:
+      #   self.dlc_live.get_pose(frame)
+      #   pose = self.dlc_live.pose
+      #   idu.draw_dots(frame, pose)
+
+      self.frame = frame  # if we're keeping track of frames, it will get written
+
       im.Release()
-      raise Exception(f"Image incomplete with image status {status} ...")
-
-    frame = np.reshape(im.GetData(), (self.height, self.width))
-    if self._saving:
-      self.save(frame)
-      text = 'recording...'
-      cv2.putText(frame, text, (700, 50),
-                  cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
-
-    # check calibration status
-    if self._in_calibrating and self._ex_calibrating:
-      raise Warning('Only one type of calibration can be turned on!')
-
-    # intrinsic calibration
-    if self._in_calibrating and not self._ex_calibrating:
-      self.intrinsic_calibration(frame)
-
-    # extrinsic calibration
-    if self._ex_calibrating and not self._in_calibrating:
-      self.extrinsic_calibration(frame)
-
-    if self._dlc:
-      if self._dlc_count:
-        self.dlc_live.init_inference(frame)
-        self._dlc_count = None
-      if self.frame_count % 3 == 0: #TODO: make this 3 a constant at top of file
-        self.dlc_live.get_pose(frame)
-        pose = self.dlc_live.pose
-        idu.draw_dots(frame, pose)
-
-    # TODO: acquire the _displaying_lock, but don't nest the locks
-    if self._displaying:
-      # acquire lock on frame
-      with self._frame_lock:
-        self.frame = frame
-        self.frame_count += 1
-        # TODO: this part should not be commented?
-        # self.display()
-
-    im.Release()
+      yield frame
 
   def save(self, frame):
-    self.file.stdin.write(frame.tobytes())
+    self._file.stdin.write(frame.tobytes())
 
   def get_camera_properties(self):
     nodemap_tldevice = self._spincam.GetTLDeviceNodeMap()
@@ -379,7 +433,7 @@ class Camera:
                 cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 125), 2)
 
     # get corners and refine them in openCV for every 3 frames
-    if self.in_calib.decimator % 3 == 0: #TODO: move 3 to a constant at top of file
+    if self.in_calib.decimator % 3 == 0:  # TODO: move 3 to a constant at top of file
       corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
           frame, self.in_calib.board.dictionary, parameters=self.in_calib.params)
       detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
@@ -400,16 +454,19 @@ class Camera:
     return frame
 
   def display(self):
-    if self._displaying:
-      with self._frame_lock:
-        frame_count = self.frame_count  # get the starting number of frames
-      while self._displaying:
-        with self._frame_lock:
-          if self.frame_count > frame_count:  # display the frame if it's new ~ might run into issues here?
-            frame_count = self.frame_count
-            self._frame_bytes.seek(0)  # go to the beginning of the buffer
-            Image.fromarray(self.frame).save(self._frame_bytes, 'bmp')
-            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
+    frame_bytes = BytesIO()
+    last_count = 0
+    frame, frame_count = self.frame_and_count
+    while frame is not None:
+      # TODO: draw on the frame, using e.g. self._pose and self.ex_calib, etc.
+      if frame_count > last_count:  # display the frame if it's new ~ might run into issues here?
+        last_count = frame_count
+        frame_bytes.seek(0)  # go to the beginning of the buffer
+        Image.fromarray(frame).save(frame_bytes, 'bmp')
+        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_bytes.getvalue() + b'\r\n')
+      else:
+        pass  # TODO: sleep, just as in self.run()
+      frame, frame_count = self.frame_and_count
 
   def extrinsic_calibration(self, frame):
     # if there isn't configuration on the screen, save corners and ids
@@ -419,7 +476,7 @@ class Camera:
                   cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
       # calibrate every 3 frames
-      if self.ex_calib.decimator % 3 == 0: #TODO: move to constant at top of file
+      if self.ex_calib.decimator % 3 == 0:  # TODO: move to constant at top of file
         # get parameters
         params = self.ex_calib.params
 
@@ -485,29 +542,34 @@ class Camera:
                         cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
       self.ex_calib.decimator += 1
 
-  def run(self):
-    flag = False
-    last = 0
+  def run(self):  # repeatedly calls self.capture() while self.running
+    self._has_runner = True #register the runner
+
+    last_frame = np.empty(self.size)
+    capture = self.capture()  # returns a generator function, can call .next() method
+    last_frame_time = 0
     # we will wait a bit less than the interval between frames
     interval = (1 / self.frame_rate) - BUFFER_TIME
     while True:
-      pause_time = last + interval - time.time()
+      pause_time = last_frame_time + interval - time.time()
       if pause_time > 0:
         time.sleep(pause_time)
       with self._running_lock:
         if self._running:
-          last = time.time()
-          self.capture()
-          # self.display()  # maybe this happens in a different thread
+          last_frame_time = time.time()
+          last_frame = capture.next()
         else:
-          flag = True
-          # return ?
-      if flag:
-        return
+          self._has_runner = False #deregister the runner
+          return
+      if last_frame is not None:
+        with self._file_lock:
+          if self._file is not None:
+            self.save(last_frame)
 
   def __del__(self):
     self.stop()
-    self._spincam.EndAcquisition()
+    while self._has_runner:
+      pass  # TODO: sleep just as in self.run
     self._spincam.DeInit()
 
 

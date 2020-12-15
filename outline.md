@@ -43,20 +43,22 @@
 	- [ ] do we want a AcquisitionGroup.setFilePath() method?
 		- [ ] how to handle existing filepath?
 - Camera
+  - [ ] create a self.sleep method that multiple methods can use to sleep for correct frame interval
   - [ ] maybe we want more camera properties? exposure for one
-	- [ ] ffmpeg should take size parameter from self.width and self.height, framerate?
-	- [ ] remove flag in run() method and just return if _running is false?
-	- [ ] add self._displaying_lock
-	- [ ] Zach: stop()
-		- [ ] remove dlc_switch()
-		- [ ] different method to turn on and off display (need to use _displaying_lock, need to make sure that we don't use 2 locks at the same time)
+	- [x] ffmpeg should take size parameter from self.width and self.height, framerate?
+	- [x] remove flag in run() method and just return if _running is false?
+	- [x] add self._displaying_lock
+	- [x] Zach: stop()
+		- [x] remove dlc_switch()
+		- [x] different method to turn on and off display (need to use _displaying_lock, need to make sure that we don't use 2 locks at the same time)
 	- [ ] capture()
-		- [ ] Zach: include displaying lock
-		- [ ] Zach: why is frame_count inside the is_displaying block?
+		- [x] Zach: include displaying lock
+		- [x] Zach: why is frame_count inside the is_displaying block?
 		- [ ] Alec: move calibration and dlc stuff out 
-	- [ ] Zach: display()
-		- [ ] needs _display lock
-	- [ ] Zach: __del__ may have an issue with run() race condition
+	- [ ] display()
+		- [x] needs _display lock
+		- [ ] add frame annotation here
+	- [x] Zach: __del__ may have an issue with run() race condition
 	- [ ] dlc:
 		- [ ] new thread in AcquisitionGroup, and logic to handle whether dlc is on, which camera, etc.
 		- [ ] 'trace' button should call acquisitiongroup function to start dlc thread
