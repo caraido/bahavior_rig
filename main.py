@@ -1,4 +1,4 @@
-import SLCam
+import AcquisitionGroup
 import threading
 from flask import Flask, Response, render_template, request, redirect, url_for
 import cgi
@@ -6,15 +6,16 @@ import cgitb
 from utils import path_operation_utils as pop
 
 audio_settings = {
-    'fs': 3e5,  # sample rate
+    'fs': 3e5,  # sample rate TODO: find a better frequency for the fft e.g. 2^18 ~ 262k
     'fMin': 200,
     'fMax': 40000,
     'nFreq': 1e2,  # number of frequencies to plot
     'fScale': 'log',  # frequency spacing, linear or log
-    'window': .0032,  # length of window in seconds
+    'window': .0032,  # length of window in seconds ~ this is 960 -> 1024?
     'overlap': .875,  # fractional overlap
     'correction': True,  # whether to correct for 1/f noise
     'readRate': 1,  # how frequently to read data from the Daq's off-board data buffer
+    # TODO: rename readRate to readPeriod
 
     # notes on parameters:
 
@@ -51,7 +52,7 @@ def record_switch():
   #     ag.start(filepath = thisFilePath, display = True)
   #     ag.run()
 
-  # remove below 
+  # remove below
   ag.cameras[0].saving_switch_on()
   ag.nidaq.saving_switch_on()
 

@@ -7,10 +7,19 @@
 
 <body>
 
-  <form action="/api" method="get" >
-    <p>Step 1: submit the saving path (leaving it alone will use the default saving path: C:\Users\SchwartzLab\Desktop\Date_Testing\</p>
-    C:\Users\SchwartzLab\ <input type="text" name="folderpath" placeholder="folder path"> \ <input type="text" name="foldername" placeholder="folder name"> \<br>
+  <form action="/api" method="post">
+    <p>Step 1: submit the saving path (leaving it alone will use the default saving path:
+      C:\Users\SchwartzLab\Desktop\Date_Testing\</p>
+    C:\Users\SchwartzLab\ <input type="text" name="folderpath" placeholder="folder path"> \ <input type="text"
+      name="foldername" placeholder="folder name"> \<br>
     <input type="submit" name="action" value="confirm and submit"> <br>
+    <!-- should look like:
+      "Data is currently being saved to D:\\behavior"
+      "Enter the root file name from the database" < -- input box
+      we will take the input data and use that to create our file names
+      e.g. socialbehavior_${rootfilename}_${currentdateandtime}_camera0.mov
+      e.g. D:\\behavior\${rootfilename}\camera0.mov
+    -->
   </form>
   <form action="/api" method="post">
     <p>Step 2: start the cameras and spectrogram for previewing</p>
@@ -37,11 +46,11 @@
     <input type="submit" name="action" value="save and quit" />
   </form>
   <p>Top Camera</p>
-  <img src='/video/0' style="width:640px; height:540px"/>
-  <img src='/video/1' style="width:640px; height:540px"/>
-  <img src='/video/2' style="width:640px; height:540px"/>
-  <img src='/video/3' style="width:640px; height:540px"/>
-  <img src='/audio' max-width="100%" max-height="100%" style="width:1280px; height:480px"/>
+  <img src='/video/0' style="width:640px; height:540px" />
+  <img src='/video/1' style="width:640px; height:540px" />
+  <img src='/video/2' style="width:640px; height:540px" />
+  <img src='/video/3' style="width:640px; height:540px" />
+  <img src='/audio' max-width="100%" max-height="100%" style="width:1280px; height:480px" />
 </body>
 
 </html>

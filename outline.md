@@ -4,9 +4,17 @@
 - [ ] Zach: look into selecting files/path from gui
 - [ ] Zach: look into checking if gpu available
 - [ ] Zach: popup window when trying to close gui? to stop experiment; also displaying should turn false whenever gui is closed?
+- [ ] Alec: instead of saving in Documents, save to the second SSD (e.g. D:\\behavior) and make a desktop shortcut; incorporate the rootfilename from the database
+- [ ] Zach: come up with a first pass at the processinggroup
+- [ ] Both: go back over some things and add warnings, but we will just pass the warnings to the gui, rather than Warnin() which goes to the python console
+- [ ] remove unused imports
+- [ ] import * file
 
 # index.html
-- [ ] filepath should be a post method, not get
+- [x] filepath should be a post method, not get
+
+# other gui
+- [ ] add axis labels to audio plot
 
 # main.py
 - [ ] make sure that saving and calibration are mutually exclusive, and that dlc and calibration are mutually exclusive
@@ -43,7 +51,7 @@
 	- [ ] do we want a AcquisitionGroup.setFilePath() method?
 		- [ ] how to handle existing filepath?
 - Camera
-  - [ ] create a self.sleep method that multiple methods can use to sleep for correct frame interval
+  - [x] create a self.sleep method that multiple methods can use to sleep for correct frame interval
   - [ ] maybe we want more camera properties? exposure for one
 	- [x] ffmpeg should take size parameter from self.width and self.height, framerate?
 	- [x] remove flag in run() method and just return if _running is false?
@@ -59,20 +67,32 @@
 		- [x] needs _display lock
 		- [ ] add frame annotation here
 	- [x] Zach: __del__ may have an issue with run() race condition
-	- [ ] dlc:
+	- [ ] Alec: dlc
 		- [ ] new thread in AcquisitionGroup, and logic to handle whether dlc is on, which camera, etc.
 		- [ ] 'trace' button should call acquisitiongroup function to start dlc thread
 		- [ ] dlc thread runs a cam.run_dlc() method which works similar to display() and run(), i.e. while loop
 		- [ ] dlc will acquire self.frame and write to self.pose
 		- [ ] display() will take self.frame, and if self._dlc is true it will call idu.draw_dots on self.pose
 		- [ ] move the cv2.putText into display()
-	- [ ] calibration:
+	- [ ] Alec: calibration
 		- [ ] make sure that we're preventing calibration during dlc, saving (dlc_switch, start, and calibration_switch)
 		- [ ] maybe we'll make a thread for calibration, and will have a while loop accessing self._frame_lock, copying self.frame, and feeding to intrinsic_calibration() etc. 
 		- [ ] move intrinsic_calibration to Calib.process_frame(frame)? Calib object should store the text and corners, ids
 		- [ ] Camera.display() will call Calib.draw_on_frame(frame)
-
+- Nidaq
+	- [ ] method(s) to update display settings
+	- [ ] frame_bytes should be constructed in generator
+	- [ ] Zach: update start, stop, del, running, capture, save, etc. methods to conform to new Camera methods
+	- [ ] Zach: add logic so that if display is true and filepath is none then self.log_mode should be LoggingMode.OFF? test this. fixes unwanted.tdms
+	- [ ] remove saving/display switch workarounds
+  - [ ] Zach: move task creation to __init__ but keep some stuff in start when the values might change e.g. readRate/readPeriod. Then in stop() we will call nidaqmx.task.stop() instead of .close()
+	- [ ] copy self.sleep() over from Camera
+	- [ ] add audio parameter to flip the y axis 
+  - [ ] look into a better frequency
 
 
 still to look into:
-Nidaq class, utilities folder, probably not calib and board classes 
+[x] Nidaq class
+[ ] utilities folder
+[ ] probably not calib and board classes 
+[ ] talk about ProcessingGroup
