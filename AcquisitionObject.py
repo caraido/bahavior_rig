@@ -2,7 +2,7 @@ import threading
 from io import BytesIO
 from PIL import Image
 import time
-import np
+import numpy as np
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 
@@ -25,7 +25,7 @@ class AcquisitionObject:
     return process
 
   def capture(self):
-    data = self.new_data
+    data = self.new_data  # preallocate for speed
     while True:
       # update data via capture
       yield data
@@ -150,7 +150,7 @@ class AcquisitionObject:
   @property
   def processing(self):
     with self._processing_lock:
-      return self._process
+      return self._processing
 
   @processing.setter
   def processing(self, processing):
@@ -218,7 +218,7 @@ class AcquisitionObject:
         # try to capture the next data segment
         if self._running:
           data_time = time.time()
-          data = capture.next()
+          data = next(capture)
         else:
           self._has_runner = False
           return
