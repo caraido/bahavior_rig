@@ -103,7 +103,7 @@ class Camera:
 
   @file.setter
   def file(self, filepath):
-    if filepath:
+    if filepath is not None:
       with self._file_lock:
         self._file = ffmpeg \
             .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}') \
@@ -113,10 +113,10 @@ class Camera:
     else:
       with self._file_lock:
         if self._file is not None:
-          self.file.stdin.close()
-          self.file.wait()
+          self._file.stdin.close()
+          self._file.wait()
           del self.file
-          self.file = None
+          self._file = None
 
   @property
   def frame(self):
