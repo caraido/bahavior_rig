@@ -222,15 +222,22 @@ class Camera:
 
   @running.setter
   def running(self, running):
-    if running:
-      with self._running_lock:
-        # may need to check first that self._running is false, but slower
-        self._spincam.BeginAcquisition()
-        self._running = True
+    if isinstance(running, bool):
+      if running:
+        with self._running_lock:
+          # may need to check first that self._running is false, but slower
+          self._spincam.BeginAcquisition()
+          self._running = True
+      else:
+        with self._running_lock:
+          self._spincam.EndAcquisition()
+          self._running = False
     else:
       with self._running_lock:
-        self._spincam.EndAcquisition()
-        self._running = False
+        if self._running:
+          return True, time.time(), running.next()
+        else:
+          return False, None, None
 
   @property
   def file(self):
@@ -552,18 +559,15 @@ class Camera:
       pause_time = last_frame_time + interval - time.time()
       if pause_time > 0:
         time.sleep(pause_time)
-      with self._running_lock:
-        if self._running:
-          last_frame_time = time.time()
-          last_frame = capture.next()
-        else:
-          self._has_runner = False  # deregister the runner
-          return
-      if last_frame is not None:
-        with self._file_lock:
-          if self._file is not None:
-            self.save(last_frame)
-        self.frame = last_frame  # write the frame to the instance buffer
+      is_running, last_frame_time, last_frame = self.running(capture)
+      if not is_running:
+        self._has_runner = False
+        return
+
+      with self._file_lock:
+        if self._file is not None:
+          self.save(last_frame)
+      self.frame = last_frame  # write the frame to the instance buffer
 
   def __del__(self):
     self.stop()
