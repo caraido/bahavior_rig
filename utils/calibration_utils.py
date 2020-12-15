@@ -145,3 +145,27 @@ def quick_calibrate(someCorners, someIds, board, width, height):
         calib_params = quick_calibrate_charuco(allCorners, allIds, board, width, height)
         return calib_params
 
+
+def undistort_images(config, images_path, cam_num):
+    intrinsics = load_intrinsics(config['calibration']['calib_video_path'], cam_num)
+    mtx = np.array(intrinsics[cam_num]['camera_mat'])
+    dist = np.array(intrinsics[cam_num]['dist_coeff'])
+    resolution = tuple(config['video']['resolution'])
+    newcameramtx, _ = cv2.getOptimalNewCameraMatrix(mtx, dist, resolution, 1, resolution)
+
+    images = []
+    for file in os.listdir(images_path):
+        if fnmatch.fnmatch(file, '*.png'):
+            images.append(file)
+
+    path_to_save_undistorted_images = os.path.join(images_path, 'undistorted')
+
+    if not os.path.exists(path_to_save_undistorted_images):
+        os.mkdir(path_to_save_undistorted_images)
+
+    for image in tqdm(images):
+        img = cv2.imread(os.path.join(images_path, image))
+        dst = cv2.undistort(img, mtx, dist, None, newcameramtx)
+        cv2.imwrite(os.path.join(path_to_save_undistorted_images, image), dst)
+
+

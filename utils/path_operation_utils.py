@@ -72,7 +72,7 @@ def reformat_filepath(path,name,camera:list):
 	for serial_number in camera:
 		camera_filepath = full_path+'/'+'camera_' + serial_number+'.MOV'
 		filepaths.append(camera_filepath)
-
+	# TODO: change file name to match the root folder name
 	audio_filepath = full_path+'/'+'audio.tdms'
 	filepaths.append(audio_filepath)
 	return filepaths

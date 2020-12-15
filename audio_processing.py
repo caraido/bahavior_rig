@@ -9,9 +9,10 @@ sample_rate = 3e5
 
 # turn tdms to np array
 def read_audio(path, raw_data_flag=False):
-    dir_list = os.listdir(path)
-    item_list = [path + item for item in dir_list if '.tdms' in item and '.tdms_index' not in item]
-    f = item_list[0]
+    #dir_list = os.listdir(path)
+    #item_list = [path + item for item in dir_list if '.tdms' in item and '.tdms_index' not in item]
+    #f = item_list[0]
+    f=path
 
     with TdmsFile.open(f) as file:
         group = file.groups()[0]

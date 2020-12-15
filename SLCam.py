@@ -552,7 +552,7 @@ class Nidaq:
             "Dev1/ai1"
         )  # this channel measures the audio signal
 
-        # self.audio.ai_channels.ai_microphone_sensitivity=100 # doesn't know if it works
+        # self.audio.ai_channels.ai_gain=100 # doesn't know if it works
         self.audio.ai_channels['Dev1/ai1'].ai_gain= 10000
         self.audio.timing.cfg_samp_clk_timing(
             self.sample_rate, sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS
@@ -749,14 +749,24 @@ class Nidaq:
   def stop(self):
     with self._running_lock:
       if self._running:
+        # is .stop() necessary??
+        self.audio.stop()
+        self.trigger.stop()
+
         self.audio.close()
         self.trigger.close()
+
         self._running = False
         self._displaying = False
         self._saving = False
         print('stopped nidaq')
+    os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms_index')
+    os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
+    # save .mat
 
-
+    audio,_ = read_audio(self.filepath)
+    sio.savemat(self.filepath[:-4] + 'mat', {'audio': audio, 'sample_rate': self.sample_rate})
+    print('save nidaq')
 
   def __del__(self):
     self.stop()
@@ -820,8 +830,6 @@ class AcquisitionGroup:
     #audio = read_audio(self.filepaths[-1])
     #sio.savemat(self.filepaths[-1] + 'audio.mat', {'audio': audio, 'sample_rate': self.nidaq.sample_rate})
     #print('save nidaq')
-    os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
-    os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms_index')
 
   def __del__(self):
     for cam in self.cameras:
