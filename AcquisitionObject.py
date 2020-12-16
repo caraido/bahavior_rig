@@ -223,7 +223,7 @@ class AcquisitionObject:
     self.processing = None
 
   def sleep(self, last):
-    pause_time = last + self._interval - time.time()
+    pause_time = last + self.run_interval - time.time()
     if pause_time > 0:
       time.sleep(pause_time)
 
@@ -253,7 +253,7 @@ class AcquisitionObject:
     self._has_runner = True
     data = self.new_data
     capture = self.capture(self.new_data)
-    data_time = time.time() - self._interval
+    data_time = time.time() - self.run_interval
 
     while True:
       self.sleep(data_time)
