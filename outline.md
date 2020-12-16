@@ -1,6 +1,6 @@
-### Code Rebase 12/14
+# Code Rebase 12/14
 
-## Todo:
+## Other todos:
 - [ ] Zach: look into selecting files/path from gui
 - [ ] Zach: look into checking if gpu available
 - [ ] Zach: popup window when trying to close gui? to stop experiment; also displaying should turn false whenever gui is closed?
@@ -10,13 +10,13 @@
 - [ ] remove unused imports
 - [ ] import * file
 
-# index.html
+## index.html
 - [x] filepath should be a post method, not get
 
-# other gui
+## other gui
 - [ ] add axis labels to audio plot
 
-# main.py
+## main.py
 - [ ] make sure that saving and calibration are mutually exclusive, and that dlc and calibration are mutually exclusive
 - [ ] move ag.run() in line 108 into its own API route
 - [ ] API route to update audio settings
@@ -41,7 +41,7 @@
 	- [ ] start/stop preview?
 	- [ ] get/set various settings?
 
-# SLCam.py
+## SLCam.py
 - [x] move classes to own files
 - [x] make base class for cameras and nidaq to inherit from
 - AcquisitionGroup
@@ -94,8 +94,8 @@
   - [ ] look into a better sample frequency
 
 
-still to look into:
-[x] Nidaq class
-[ ] utilities folder
-[ ] probably not calib and board classes 
-[x] talk about ProcessingGroup
+## still to look into:
+- [x] Nidaq class
+- [ ] utilities folder
+- [ ] probably not calib and board classes 
+- [x] talk about ProcessingGroup
