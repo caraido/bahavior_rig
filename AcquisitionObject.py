@@ -11,21 +11,27 @@ class AcquisitionObject:
   #############
   # LIFECYCLE METHODS TO BE OVERLOADED, LISTED IN ORDER:
   #############
+
+  def open_file(self, fileObj):
+    # anything that needs to be done to open a save file for this class
+    # file object is just whatever you want to pass to close_file() later on, but cannot be None
+    return fileObj
+
+  def prepare_display(self):
+    # any necessary setup for displaying
+    pass
+
   def prepare_run(self):
     # any setup that needs to be done before running goes here
     pass
 
-  def open_file(self, fileObj):
-    # anything that needs to be done to open a save file for this class
-    return fileObj
-
-  def prepare_processing(self, opts):
+  def prepare_processing(self, options):
     # set up the processing and return the process object
     process = {}
     return process
 
-  def capture(self):
-    data = self.new_data  # preallocate for speed
+  def capture(self, data):
+    # data starts as self.new_data()
     while True:
       # update data via capture
       yield data
@@ -36,14 +42,20 @@ class AcquisitionObject:
 
   def predisplay(self, data):
     # set up data for displaying, e.g. cv2.puttext or cv2.drawline
+    # data is the raw data from capture, so it may need to be reshaped, etc.
     return data
 
   def end_run(self):
     # any cleanup that needs to be done after running goes here
     pass
 
+  def end_display(self):
+    # any cleen up after running for the display
+    pass
+
   def close_file(self, fileObj):
     # anything that needs to be done to close a save file for this class
+    # fileObj is just whatever gets passed from save_file()
     pass
 
   def end_processing(self, process):
@@ -56,8 +68,9 @@ class AcquisitionObject:
 
   # NOT OVERLOADED
 
-  def __init__(self, rate, data_size):
-    self._interval = (1 / rate) - BUFFER_TIME
+  def __init__(self, run_rate, data_size):
+    # children should call the base init method with the run_rate (in Hz) and the data_size (a tuple for numpy to preallocate)
+    self.run_rate = run_rate
     self.data_size = data_size
 
     self._running_lock = threading.Lock()
@@ -136,10 +149,15 @@ class AcquisitionObject:
     if isinstance(data, bool):
       if data:
         with self._data_lock:
+          if self._data is not None:
+            self.end_display()
           self._data = self.new_data
+          self.prepare_display()
           self._data_count = 0
       else:
         with self._data_lock:
+          if self._data is not None:
+            self.end_display()
           self._data = None
           self._data_count = 0
     else:
@@ -167,15 +185,41 @@ class AcquisitionObject:
           self.end_processing(self._processing)
           self._processing = None
 
+  @property
+  def run_interval(self):
+    return self._run_interval
+
+  @run_interval.setter
+  def run_interval(self, interval):
+    self._run_interval = interval
+    self._run_rate = 1/(interval + BUFFER_TIME)
+
+  @property
+  def run_rate(self):
+    return self._run_rate
+
+  @run_rate.setter
+  def run_rate(self, run_rate):
+    self._run_rate = run_rate
+    self._run_interval = (1/run_rate) - BUFFER_TIME
+
+  @property
+  def data_size(self):
+    return self._data_size
+
+  @data_size.setter
+  def data_size(self, data_size):
+    self._data_size = data_size
+
   def start(self, filepath=None, display=False):
     self.file = filepath
     self.data = display
     self.running = True
 
   def stop(self):
+    self.running = False
     self.file = None
     self.data = False
-    self.running = False
     self.processing = None
 
   def sleep(self, last):
@@ -208,7 +252,7 @@ class AcquisitionObject:
 
     self._has_runner = True
     data = self.new_data
-    capture = self.capture()
+    capture = self.capture(self.new_data)
     data_time = time.time() - self._interval
 
     while True:

@@ -42,8 +42,8 @@
 	- [ ] get/set various settings?
 
 # SLCam.py
-- [ ] move classes to own files
-- [ ] make base class for cameras and nidaq to inherit from
+- [x] move classes to own files
+- [x] make base class for cameras and nidaq to inherit from
 - AcquisitionGroup
 	- [ ] add a refresh pyspin.system method? for when cameras disconnect; maybe same with nidaq?
 	- [ ] check if is_started before run() is executed
@@ -79,20 +79,23 @@
 		- [ ] maybe we'll make a thread for calibration, and will have a while loop accessing self._frame_lock, copying self.frame, and feeding to intrinsic_calibration() etc. 
 		- [ ] move intrinsic_calibration to Calib.process_frame(frame)? Calib object should store the text and corners, ids
 		- [ ] Camera.display() will call Calib.draw_on_frame(frame)
+		- [ ] update to inherit from AcquisitionObject
 - Nidaq
 	- [ ] method(s) to update display settings
-	- [ ] frame_bytes should be constructed in generator
-	- [ ] Zach: update start, stop, del, running, capture, save, etc. methods to conform to new Camera methods
-	- [ ] Zach: add logic so that if display is true and filepath is none then self.log_mode should be LoggingMode.OFF? test this. fixes unwanted.tdms
-	- [ ] remove saving/display switch workarounds
-  - [ ] Zach: move task creation to __init__ but keep some stuff in start when the values might change e.g. readRate/readPeriod. Then in stop() we will call nidaqmx.task.stop() instead of .close()
-	- [ ] copy self.sleep() over from Camera
+	- [x] frame_bytes should be constructed in generator
+	- [x] Zach: update start, stop, del, running, capture, save, etc. methods to conform to new Camera methods
+	- [ ] log_mode
+		- [x] add logic so that if display is true and filepath is none then self.log_mode should be LoggingMode.OFF?
+		- [ ] test this
+	- [x] remove saving/display switch workarounds
+  - [x] Zach: move task creation to __init__ but keep some stuff in start when the values might change e.g. readRate/readPeriod. Then in stop() we will call nidaqmx.task.stop() instead of .close()
+	- [x] copy self.sleep() over from Camera
 	- [ ] add audio parameter to flip the y axis 
-  - [ ] look into a better frequency
+  - [ ] look into a better sample frequency
 
 
 still to look into:
 [x] Nidaq class
 [ ] utilities folder
 [ ] probably not calib and board classes 
-[ ] talk about ProcessingGroup
+[x] talk about ProcessingGroup
