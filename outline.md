@@ -65,20 +65,20 @@
 		- [ ] Alec: move calibration and dlc stuff out 
 	- [ ] display()
 		- [x] needs _display lock
-		- [ ] add frame annotation here
+		- [ ] add frame annotation in predisplay()
 	- [x] Zach: __del__ may have an issue with run() race condition
 	- [ ] Alec: dlc
 		- [ ] new thread in AcquisitionGroup, and logic to handle whether dlc is on, which camera, etc.
 		- [ ] 'trace' button should call acquisitiongroup function to start dlc thread
-		- [ ] dlc thread runs a cam.run_dlc() method which works similar to display() and run(), i.e. while loop
-		- [ ] dlc will acquire self.frame and write to self.pose
-		- [ ] display() will take self.frame, and if self._dlc is true it will call idu.draw_dots on self.pose
-		- [ ] move the cv2.putText into display()
+		- [ ] Zach: dlc thread runs a AcquisitionObject.run_processing() method which works similar to run()
+		- [ ] dlc will acquire a frame and write to self.pose
+		- [ ] predisplay() will take frame, and can call idu.draw_dots on self.pose
+		- [ ] move the cv2.putText into predisplay()
 	- [ ] Alec: calibration
 		- [ ] make sure that we're preventing calibration during dlc, saving (dlc_switch, start, and calibration_switch)
 		- [ ] maybe we'll make a thread for calibration, and will have a while loop accessing self._frame_lock, copying self.frame, and feeding to intrinsic_calibration() etc. 
 		- [ ] move intrinsic_calibration to Calib.process_frame(frame)? Calib object should store the text and corners, ids
-		- [ ] Camera.display() will call Calib.draw_on_frame(frame)
+		- [ ] Camera.predisplay() will call Calib.draw_on_frame(frame)
 		- [ ] update to inherit from AcquisitionObject
 - Nidaq
 	- [ ] method(s) to update display settings
