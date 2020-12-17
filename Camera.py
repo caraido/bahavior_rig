@@ -10,6 +10,7 @@ from PIL import Image
 import time
 import pandas as pd
 from dlclive import DLCLive, Processor
+from utils.image_draw_utils import draw_dots
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 FRAME_TIMEOUT = 100  # time in milliseconds to wait for pyspin to retrieve the frame
@@ -58,6 +59,8 @@ class Camera:
 
     self._dlc_lock = threading.Lock()
     self.dlc = False
+    self.next_pose=None
+    self.dlc_model_path = None
     # self._save_dlc = False
     # self._dlc_count = None
     # self.dlc_proc = None
@@ -91,6 +94,7 @@ class Camera:
             print("EndAcquisition called before BeginAcquisition")
           self._running = False
     else:
+      # TODO: shouldn't this part be in @running.getter?
       with self._running_lock:
         if self._running:
           return True, time.time(), running.next()
@@ -165,7 +169,7 @@ class Camera:
       with self._dlc_lock:
         # TODO: if any of these functions are slow, then call them outside of the lock and reassign them to member variables inside the lock
         # TODO: do we need to check if self._dlc is already true? if so, do we close the existing one and make a new one with the new model path???
-        self._dlc_proc = Processor()
+        self._dlc_proc = Processor() # for future processing
         self._dlc_live = DLCLive(
             model_path=modelpath, processor=self._dlc_proc, display=False, resize=DLC_RESIZE)
         self._dlc_first_frame = True
@@ -180,6 +184,23 @@ class Camera:
         self._dlc_first_frame = None
         self._dlc = False
 
+  def run_dlc(self,model_path):
+    self.dlc=model_path
+    last_frame_time = time.time()-self._interval
+    last_count = 0
+
+    while True:
+      self.sleep(last_frame_time)
+      frame_count,count=self.frame_and_count
+      if self.frame is not None and count > last_count:
+        last_count=frame_count
+        last_frame_time=time.time()
+        with self._dlc_lock:
+          if self._dlc_first_frame:
+            self.dlc.init_inference(frame=self.frame)
+            self._dlc_first_frame=False
+          self.pose = self.dlc.get_pose(self.frame)
+
   def start(self, filepath=None, display=False):
     self.file = filepath
     self.frame = display  # we will start storing frames
@@ -190,6 +211,31 @@ class Camera:
     self.file = False
     self.frame = False
     self.dlc = False
+
+  def run(self):  # repeatedly calls self.capture() while self.running
+    self._has_runner = True  # register the runner
+
+    last_frame = np.empty(self.size)
+    capture = self.capture()  # returns a generator function, can call .next() method
+    last_frame_time = time.time() - self._interval
+    while True:
+      self.sleep(last_frame_time)
+      is_running, last_frame_time, last_frame = self.running(capture)
+      if not is_running:
+        self._has_runner = False
+        return
+
+      with self._file_lock:
+        if self._file is not None:
+          self.save(last_frame)
+      self.frame = last_frame  # write the frame to the instance buffer
+
+  def sleep(self, since):
+    # current_time - previous_time === time_elapsed
+    # self._interval - time_elapsed === pause_time
+    pause_time = since + self._interval - time.time()
+    if pause_time > 0:
+      time.sleep(pause_time)
 
   def capture(self):
     frame = np.empty(self.size)  # preallocate, should speed up a bit
@@ -203,11 +249,6 @@ class Camera:
       # frame = np.reshape(im.GetData(), self.size)
       frame = im.GetNDArray()  # TODO: check that this works!!
 
-      # TODO: move this to self.display()
-      # text = 'recording...'
-      # cv2.putText(frame, text, (700, 50),
-      #             cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
-
       # TODO: move calibration stuff to own function running on separate process, accessing self.frame
       # check calibration status
       # if self._in_calibrating and self._ex_calibrating:
@@ -220,32 +261,6 @@ class Camera:
       # # extrinsic calibration
       # if self._ex_calibrating and not self._in_calibrating:
       #   self.extrinsic_calibration(frame)
-
-      # TODO: check this and move to run_dlc() function running on separate process
-      # last_count = 0
-      # last_frame_time = time.time() - self._interval
-      # while True:
-      #   self.sleep(last_frame_time)
-      #   frame_count, count = self.frame_and_count
-      #   if frame is not None and count > last_count:
-      #     last_count = frame_count
-      #     last_frame_time = time.time()
-      #     with self._dlc_lock:
-      #       if self._dlc_count: do init and update count
-      #       if not frame_count % DLC_UPDATE_EACH:
-      #         self.dlc_live.get_pose(frame) #is this synchronous?
-      #         self.last_pose = self.dlc_live.pose
-      #    elif frame is None or not self.dlc: #double check this logic
-      #       return
-
-      # old:
-      # if self._dlc_count:
-      #   self.dlc_live.init_inference(frame)
-      #   self._dlc_count = None
-      # if self.frame_count % 3 == 0:
-      #   self.dlc_live.get_pose(frame)
-      #   pose = self.dlc_live.pose
-      #   idu.draw_dots(frame, pose)
 
       im.Release()
       yield frame
@@ -327,6 +342,17 @@ class Camera:
     last_frame_time = time.time()  # - self._interval #TODO: check this
     while frame is not None:
       # TODO: draw on the frame, using e.g. self._pose and self.ex_calib, etc.
+      # draw pose on the frame done
+      if self.dlc:
+        draw_dots(self.frame, self.pose)
+
+      if self.file:
+        text = 'recording...'
+        cv2.putText(frame, text, (700, 50),
+                     cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
+
+
+
       if frame_count > last_count:  # display the frame if it's new
         last_count = frame_count
         last_frame_time = time.time()
@@ -411,30 +437,6 @@ class Camera:
                         cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
       self.ex_calib.decimator += 1
 
-  def run(self):  # repeatedly calls self.capture() while self.running
-    self._has_runner = True  # register the runner
-
-    last_frame = np.empty(self.size)
-    capture = self.capture()  # returns a generator function, can call .next() method
-    last_frame_time = time.time() - self._interval
-    while True:
-      self.sleep(last_frame_time)
-      is_running, last_frame_time, last_frame = self.running(capture)
-      if not is_running:
-        self._has_runner = False
-        return
-
-      with self._file_lock:
-        if self._file is not None:
-          self.save(last_frame)
-      self.frame = last_frame  # write the frame to the instance buffer
-
-  def sleep(self, since):
-    # current_time - previous_time === time_elapsed
-    # self._interval - time_elapsed === pause_time
-    pause_time = since + self._interval - time.time()
-    if pause_time > 0:
-      time.sleep(pause_time)
 
   def __del__(self):
     self.stop()

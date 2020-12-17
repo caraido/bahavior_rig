@@ -68,12 +68,12 @@
 		- [ ] add frame annotation in predisplay()
 	- [x] Zach: __del__ may have an issue with run() race condition
 	- [ ] Alec: dlc
-		- [ ] new thread in AcquisitionGroup, and logic to handle whether dlc is on, which camera, etc.
-		- [ ] 'trace' button should call acquisitiongroup function to start dlc thread
+		- [x] new thread in AcquisitionGroup, and logic to handle whether dlc is on, which camera, etc.
+		- [x] 'trace' button should call acquisitiongroup function to start dlc thread
 		- [ ] Zach: dlc thread runs a AcquisitionObject.run_processing() method which works similar to run()
-		- [ ] dlc will acquire a frame and write to self.pose
-		- [ ] predisplay() will take frame, and can call idu.draw_dots on self.pose
-		- [ ] move the cv2.putText into predisplay()
+		- [x] dlc will acquire a frame and write to self.pose
+		- [x] predisplay() will take frame, and can call idu.draw_dots on self.pose
+		- [x] move the cv2.putText into predisplay()
 	- [ ] Alec: calibration
 		- [ ] make sure that we're preventing calibration during dlc, saving (dlc_switch, start, and calibration_switch)
 		- [ ] maybe we'll make a thread for calibration, and will have a while loop accessing self._frame_lock, copying self.frame, and feeding to intrinsic_calibration() etc. 
