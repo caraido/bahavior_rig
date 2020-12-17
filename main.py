@@ -1,8 +1,5 @@
 import AcquisitionGroup
-import threading
 from flask import Flask, Response, render_template, request, redirect, url_for
-import cgi
-import cgitb
 from utils import path_operation_utils as pop
 
 audio_settings = {
@@ -30,7 +27,7 @@ audio_settings = {
 
 app = Flask(__name__)
 
-ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
+ag = AcquisitionGroup.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 
 # default filepath
 # filepath = ['C:\\Users\\SchwartzLab\\Desktop\\Testing_Female2Record.mov',

@@ -1,22 +1,8 @@
-import cv2
+
 import PySpin
-import numpy as np
-from scipy import signal, interpolate
-from scipy import io as sio
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-import ffmpeg
-import utils.calibration_utils as cau
-import utils.image_draw_utils as idu
 import os
-import toml
+
 import threading
-from io import BytesIO
-from PIL import Image
-import time
-import pandas as pd
-from dlclive import DLCLive, Processor
-from audio_processing import read_audio
 import Camera
 import Nidaq
 
@@ -26,14 +12,18 @@ class AcquisitionGroup:
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
     self.nCameras = self._camlist.GetSize()
-    self.cameras = [Camera(self._camlist, i, frame_rate)
+    self.cameras = [Camera.Camera(self._camlist, i, frame_rate)
                     for i in range(self.nCameras)]
-    self.nidaq = Nidaq(frame_rate, audio_settings)
+    self.nidaq = Nidaq.Nidaq(frame_rate, audio_settings)
 
+    self._dlc_runners = []
     self._runners = []
     self.filepaths = None
 
-  def start(self, isDisplayed=True):
+  def __call__(self,filepaths):
+    self.filepaths=filepaths
+
+  def start(self, filepaths=None, isDisplayed=True):
     if not self.filepaths:
       self.filepaths = [None] * (self.nCameras + 1)
     if not isDisplayed:

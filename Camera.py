@@ -1,14 +1,9 @@
 import cv2
 import PySpin
 import numpy as np
-import matplotlib.pyplot as plt
-import matplotlib as mpl
 import ffmpeg
 import utils.calibration_utils as cau
-from utils.calibration_utils import Calib, CharucoBoard
-import utils.image_draw_utils as idu
-import os
-import toml
+from utils.calibration_utils import Calib
 import threading
 from io import BytesIO
 from PIL import Image
@@ -45,12 +40,15 @@ class Camera:
     self.ex_calib = Calib('extrinsic')
 
     self._running_lock = threading.Lock()
+    self._running=False
     self.running = False
 
     self._file_lock = threading.Lock()
+    self._file=None
     self.file = None
 
     self._frame_lock = threading.Lock()
+    self._frame=None
     self.frame = None
 
     self._in_calibrating = False
@@ -87,7 +85,10 @@ class Camera:
           self._running = True
       else:
         with self._running_lock:
-          self._spincam.EndAcquisition()
+          try:
+            self._spincam.EndAcquisition()
+          except:
+            print("EndAcquisition called before BeginAcquisition")
           self._running = False
     else:
       with self._running_lock:
@@ -167,14 +168,16 @@ class Camera:
         self._dlc_proc = Processor()
         self._dlc_live = DLCLive(
             model_path=modelpath, processor=self._dlc_proc, display=False, resize=DLC_RESIZE)
-        self._dlc_count = 1  # TODO: is this actually a count?
+        self._dlc_first_frame = True
         self._dlc = True
     else:
       with self._dlc_lock:
         self._dlc_proc = None
-        self._dlc_live.close()
-        # TODO: is this actually a count? or a boolean (if so should be true/false)?
-        self._dlc_count = None
+        try:
+          self._dlc_live.close()
+        except:
+          pass
+        self._dlc_first_frame = None
         self._dlc = False
 
   def start(self, filepath=None, display=False):

@@ -1,23 +1,12 @@
-import cv2
 import numpy as np
 from scipy import signal, interpolate
-from scipy import io as sio
-import matplotlib.pyplot as plt
 import matplotlib as mpl
-import ffmpeg
-import utils.calibration_utils as cau
-import utils.image_draw_utils as idu
-import os
-import toml
 import threading
 from io import BytesIO
 from PIL import Image
 import nidaqmx
 from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 import time
-import pandas as pd
-from dlclive import DLCLive, Processor
-from audio_processing import read_audio
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 

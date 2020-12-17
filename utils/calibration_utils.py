@@ -212,7 +212,7 @@ class Calib:
 
     self.board = CharucoBoard(x=6, y=2).board
 
-    self.max_size = cau.get_expected_corners(self.board)
+    self.max_size = get_expected_corners(self.board)
     self.save_path = './config/config_'+self.type+'_'
     self.load_path = './config/'
 
