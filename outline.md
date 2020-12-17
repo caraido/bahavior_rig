@@ -1,6 +1,6 @@
-### Code Rebase 12/14
+# Code Rebase 12/14
 
-## Todo:
+## Other todos:
 - [ ] Zach: look into selecting files/path from gui
 - [ ] Zach: look into checking if gpu available
 - [ ] Zach: popup window when trying to close gui? to stop experiment; also displaying should turn false whenever gui is closed?
@@ -10,13 +10,13 @@
 - [ ] remove unused imports
 - [ ] import * file
 
-# index.html
+## index.html
 - [x] filepath should be a post method, not get
 
-# other gui
+## other gui
 - [ ] add axis labels to audio plot
 
-# main.py
+## main.py
 - [ ] make sure that saving and calibration are mutually exclusive, and that dlc and calibration are mutually exclusive
 - [ ] move ag.run() in line 108 into its own API route
 - [ ] API route to update audio settings
@@ -41,9 +41,9 @@
 	- [ ] start/stop preview?
 	- [ ] get/set various settings?
 
-# SLCam.py
-- [ ] move classes to own files
-- [ ] make base class for cameras and nidaq to inherit from
+## SLCam.py
+- [x] move classes to own files
+- [x] make base class for cameras and nidaq to inherit from
 - AcquisitionGroup
 	- [ ] add a refresh pyspin.system method? for when cameras disconnect; maybe same with nidaq?
 	- [ ] check if is_started before run() is executed
@@ -65,34 +65,37 @@
 		- [ ] Alec: move calibration and dlc stuff out 
 	- [ ] display()
 		- [x] needs _display lock
-		- [ ] add frame annotation here
+		- [ ] add frame annotation in predisplay()
 	- [x] Zach: __del__ may have an issue with run() race condition
 	- [ ] Alec: dlc
 		- [ ] new thread in AcquisitionGroup, and logic to handle whether dlc is on, which camera, etc.
 		- [ ] 'trace' button should call acquisitiongroup function to start dlc thread
-		- [ ] dlc thread runs a cam.run_dlc() method which works similar to display() and run(), i.e. while loop
-		- [ ] dlc will acquire self.frame and write to self.pose
-		- [ ] display() will take self.frame, and if self._dlc is true it will call idu.draw_dots on self.pose
-		- [ ] move the cv2.putText into display()
+		- [ ] Zach: dlc thread runs a AcquisitionObject.run_processing() method which works similar to run()
+		- [ ] dlc will acquire a frame and write to self.pose
+		- [ ] predisplay() will take frame, and can call idu.draw_dots on self.pose
+		- [ ] move the cv2.putText into predisplay()
 	- [ ] Alec: calibration
 		- [ ] make sure that we're preventing calibration during dlc, saving (dlc_switch, start, and calibration_switch)
 		- [ ] maybe we'll make a thread for calibration, and will have a while loop accessing self._frame_lock, copying self.frame, and feeding to intrinsic_calibration() etc. 
 		- [ ] move intrinsic_calibration to Calib.process_frame(frame)? Calib object should store the text and corners, ids
-		- [ ] Camera.display() will call Calib.draw_on_frame(frame)
+		- [ ] Camera.predisplay() will call Calib.draw_on_frame(frame)
+		- [ ] update to inherit from AcquisitionObject
 - Nidaq
 	- [ ] method(s) to update display settings
-	- [ ] frame_bytes should be constructed in generator
-	- [ ] Zach: update start, stop, del, running, capture, save, etc. methods to conform to new Camera methods
-	- [ ] Zach: add logic so that if display is true and filepath is none then self.log_mode should be LoggingMode.OFF? test this. fixes unwanted.tdms
-	- [ ] remove saving/display switch workarounds
-  - [ ] Zach: move task creation to __init__ but keep some stuff in start when the values might change e.g. readRate/readPeriod. Then in stop() we will call nidaqmx.task.stop() instead of .close()
-	- [ ] copy self.sleep() over from Camera
+	- [x] frame_bytes should be constructed in generator
+	- [x] Zach: update start, stop, del, running, capture, save, etc. methods to conform to new Camera methods
+	- [ ] log_mode
+		- [x] add logic so that if display is true and filepath is none then self.log_mode should be LoggingMode.OFF?
+		- [ ] test this
+	- [x] remove saving/display switch workarounds
+  - [x] Zach: move task creation to __init__ but keep some stuff in start when the values might change e.g. readRate/readPeriod. Then in stop() we will call nidaqmx.task.stop() instead of .close()
+	- [x] copy self.sleep() over from Camera
 	- [ ] add audio parameter to flip the y axis 
-  - [ ] look into a better frequency
+  - [ ] look into a better sample frequency
 
 
-still to look into:
-[x] Nidaq class
-[ ] utilities folder
-[ ] probably not calib and board classes 
-[ ] talk about ProcessingGroup
+## still to look into:
+- [x] Nidaq class
+- [ ] utilities folder
+- [ ] probably not calib and board classes 
+- [x] talk about ProcessingGroup
