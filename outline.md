@@ -63,9 +63,9 @@
 		- [x] Zach: include displaying lock
 		- [x] Zach: why is frame_count inside the is_displaying block?
 		- [ ] Alec: move calibration and dlc stuff out 
-	- [ ] display()
+	- [x] display()
 		- [x] needs _display lock
-		- [ ] add frame annotation in predisplay()
+		- [x] add frame annotation in predisplay()
 	- [x] Zach: __del__ may have an issue with run() race condition
 	- [ ] Alec: dlc
 		- [x] new thread in AcquisitionGroup, and logic to handle whether dlc is on, which camera, etc.
@@ -76,10 +76,12 @@
 		- [x] move the cv2.putText into predisplay()
 	- [ ] Alec: calibration
 		- [ ] make sure that we're preventing calibration during dlc, saving (dlc_switch, start, and calibration_switch)
-		- [ ] maybe we'll make a thread for calibration, and will have a while loop accessing self._frame_lock, copying self.frame, and feeding to intrinsic_calibration() etc. 
+			- [ ] update: calibration is prevented during dlc...
+		- [x] maybe we'll make a thread for calibration, and will have a while loop accessing self._frame_lock, copying self.frame, and feeding to intrinsic_calibration() etc. 
 		- [ ] move intrinsic_calibration to Calib.process_frame(frame)? Calib object should store the text and corners, ids
-		- [ ] Camera.predisplay() will call Calib.draw_on_frame(frame)
-		- [ ] update to inherit from AcquisitionObject
+			- [ ] update: see Camera.do_process(). Calib.do_process() or whatever should return a results dict
+		- [x] Camera.predisplay() will call Calib.draw_on_frame(frame)
+	- [x] update to inherit from AcquisitionObject
 - Nidaq
 	- [ ] method(s) to update display settings
 	- [x] frame_bytes should be constructed in generator
