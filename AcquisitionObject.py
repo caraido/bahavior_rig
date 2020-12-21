@@ -142,7 +142,7 @@ class AcquisitionObject:
   @property
   def data(self):
     with self._data_lock:
-      return self._data
+      return self._data.copy()
 
   @property
   def data_count(self):
@@ -152,7 +152,7 @@ class AcquisitionObject:
   @property
   def data_and_count(self):
     with self._data_lock:
-      return self._data, self._data_count
+      return self._data.copy(), self._data_count
 
   @property
   def new_data(self):

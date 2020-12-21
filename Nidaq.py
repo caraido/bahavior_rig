@@ -105,7 +105,7 @@ class Nidaq(AcquisitionObject):
   def capture(self, data):
     while True:
       self._audio_reader.read_many_sample(
-          self.data,
+          data,
           number_of_samples_per_channel=self.data_size[0]
       )
       yield data
