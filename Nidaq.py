@@ -7,7 +7,6 @@ from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 from audio_processing import read_audio
 from AcquisitionObject import AcquisitionObject
 
-BUFFER_TIME = .005  # time in seconds allowed for overhead
 AUDIO_INPUT_CHANNEL = 'Dev1/ai1'
 AUDIO_INPUT_GAIN = 1e4
 PC_BUFFER_TIME_IN_SECONDS = 60  # buffer before python

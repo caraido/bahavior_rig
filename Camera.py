@@ -15,14 +15,14 @@ from PIL import Image
 import time
 import pandas as pd
 from dlclive import DLCLive, Processor
+from AcquisitionObject import AcquisitionObject
 
-BUFFER_TIME = .005  # time in seconds allowed for overhead
 FRAME_TIMEOUT = 100  # time in milliseconds to wait for pyspin to retrieve the frame
 DLC_RESIZE = 0.6  # resize the frame by this factor for DLC
 DLC_UPDATE_EACH = 3  # frame interval for DLC update
 
 
-class Camera:
+class Camera(AcquisitionObject):
 
   def __init__(self, camlist, index, frame_rate):
     self._spincam = camlist.GetByIndex(index)
@@ -34,32 +34,33 @@ class Camera:
     self._spincam.TriggerMode.SetValue(PySpin.TriggerMode_Off)
     self._spincam.TriggerSource.SetValue(PySpin.TriggerSource_Line0)
     self._spincam.TriggerMode.SetValue(PySpin.TriggerMode_On)
-
-    self.frame_rate = frame_rate
-    self._interval = (1 / self.frame_rate) - BUFFER_TIME
-
     self.device_serial_number, self.height, self.width = self.get_camera_properties()
-    self.size = (self.width, self.height)
+    # self.size = (self.width, self.height)
+
+    AcquisitionObject.__init__(self, frame_rate, (self.width, self.height))
+
+    # self.frame_rate = frame_rate
+    # self._interval = (1 / self.frame_rate) - BUFFER_TIME
 
     self.in_calib = Calib('intrinsic')
     self.ex_calib = Calib('extrinsic')
 
-    self._running_lock = threading.Lock()
-    self.running = False
+    # self._running_lock = threading.Lock()
+    # self.running = False
 
-    self._file_lock = threading.Lock()
-    self.file = None
+    # self._file_lock = threading.Lock()
+    # self.file = None
 
-    self._frame_lock = threading.Lock()
-    self.frame = None
+    # self._frame_lock = threading.Lock()
+    # self.frame = None
 
     self._in_calibrating = False
     self._ex_calibrating = False
 
-    self._has_runner = False
+    # self._has_runner = False
 
-    self._dlc_lock = threading.Lock()
-    self.dlc = False
+    # self._dlc_lock = threading.Lock()
+    # self.dlc = False
     # self._save_dlc = False
     # self._dlc_count = None
     # self.dlc_proc = None
@@ -72,110 +73,16 @@ class Camera:
   #   self.frame    | main, runner, display, calib, dlc | frame can be read/written without collision if exists
   #   self.dlc      | main, dlc                         | tells whether dlc objects exist
 
-  @property
-  def running(self):
-    with self._running_lock:
-      return self._running
+  def prepare_processing(self, modelpath):
+    process = {}
+    process['processor'] = Processor()
+    process['DLCLive'] = DLCLive(
+        model_path=modelpath, processor=process['processor'], display=False, resize=DLC_RESIZE)
+    process['count'] = 1  # TODO: is this actually a count?
+    return process
 
-  @running.setter
-  def running(self, running):
-    if isinstance(running, bool):
-      if running:
-        with self._running_lock:
-          # may need to check first that self._running is false, but slower
-          self._spincam.BeginAcquisition()
-          self._running = True
-      else:
-        with self._running_lock:
-          self._spincam.EndAcquisition()
-          self._running = False
-    else:
-      with self._running_lock:
-        if self._running:
-          return True, time.time(), running.next()
-        else:
-          return False, None, None
-
-  @property
-  def file(self):
-    with self._file_lock:
-      return self._file
-
-  @file.setter
-  def file(self, filepath):
-    if filepath is not None:
-      with self._file_lock:
-        self._file = ffmpeg \
-            .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}') \
-            .output(filepath, vcodec='libx265') \
-            .overwrite_output() \
-            .run_async(pipe_stdin=True)
-    else:
-      with self._file_lock:
-        if self._file is not None:
-          self._file.stdin.close()
-          self._file.wait()
-          del self.file
-          self._file = None
-
-  @property
-  def frame(self):
-    with self._frame_lock:
-      return self._frame
-
-  @property
-  def frame_count(self):
-    with self._frame_lock:
-      return self._frame_count
-
-  @property
-  def frame_and_count(self):
-    with self._frame_lock:
-      return self._frame, self._frame_count
-
-  @frame.setter
-  def frame(self, frame):
-    if isinstance(frame, bool):
-      if frame:
-        with self._frame_lock:
-          self._frame = np.empty(self.size)
-          self._frame_count = 0
-      else:
-        with self._frame_lock:
-          self._frame = None
-          self._frame_count = 0
-    else:
-      with self._frame_lock:
-        if self._frame is not None:
-          self._frame = frame
-          self._frame_count += 1
-
-  @property
-  def dlc(self):
-    with self._dlc_lock:
-      if self._dlc:
-        return self._dlc_live
-      else:
-        return False
-
-  @dlc.setter  # usage: to turn on, call self.dlc = modelpath ; to turn off, call self.dlc = False
-  def dlc(self, modelpath):
-    if modelpath:
-      with self._dlc_lock:
-        # TODO: if any of these functions are slow, then call them outside of the lock and reassign them to member variables inside the lock
-        # TODO: do we need to check if self._dlc is already true? if so, do we close the existing one and make a new one with the new model path???
-        self._dlc_proc = Processor()
-        self._dlc_live = DLCLive(
-            model_path=modelpath, processor=self._dlc_proc, display=False, resize=DLC_RESIZE)
-        self._dlc_count = 1  # TODO: is this actually a count?
-        self._dlc = True
-    else:
-      with self._dlc_lock:
-        self._dlc_proc = None
-        self._dlc_live.close()
-        # TODO: is this actually a count? or a boolean (if so should be true/false)?
-        self._dlc_count = None
-        self._dlc = False
+  def end_processing(self, process):
+    process['DLCLive'].close()
 
   def start(self, filepath=None, display=False):
     self.file = filepath
