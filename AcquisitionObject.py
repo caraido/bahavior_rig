@@ -40,6 +40,15 @@ class AcquisitionObject:
     # anything that needs to be done to save a chunk for this class
     pass
 
+  def do_process(self, data, data_count, process):
+    # generate results from the input data
+    results = {}
+    # if the process has changed, return the updated object
+    # else return none
+
+    return results, None
+    # return results, process #also valid
+
   def predisplay(self, data):
     # set up data for displaying, e.g. cv2.puttext or cv2.drawline
     # data is the raw data from capture, so it may need to be reshaped, etc.
@@ -50,7 +59,7 @@ class AcquisitionObject:
     pass
 
   def end_display(self):
-    # any cleen up after running for the display
+    # any clean up after running for the display
     pass
 
   def close_file(self, fileObj):
@@ -84,8 +93,13 @@ class AcquisitionObject:
 
     self._processing_lock = threading.Lock()
     self._processing = False
+    self.process_rate = 0
+
+    self._results_lock = threading.Lock()
+    self._results = None
 
     self._has_runner = False
+    self._has_processor = False
 
   @property
   def running(self):
@@ -186,22 +200,47 @@ class AcquisitionObject:
           self._processing = None
 
   @property
+  def results(self):
+    with self._results_lock:
+      return self._results
+
+  @results.setter
+  def results(self, results):
+    with self._results_lock:
+      self._results = results
+
+  @property
   def run_interval(self):
     return self._run_interval
 
   @run_interval.setter
   def run_interval(self, interval):
     self._run_interval = interval
-    self._run_rate = 1/(interval + BUFFER_TIME)
+    # self._run_rate = 1/(interval + BUFFER_TIME)
 
   @property
   def run_rate(self):
-    return self._run_rate
+    return 1/(self._run_interval + BUFFER_TIME)
 
   @run_rate.setter
   def run_rate(self, run_rate):
-    self._run_rate = run_rate
     self._run_interval = (1/run_rate) - BUFFER_TIME
+
+  @property
+  def process_interval(self):
+    return self._process_interval
+
+  @property
+  def process_rate(self):
+    return 1/(self._process_interval + BUFFER_TIME)
+
+  @process_interval.setter
+  def process_interval(self, interval):
+    self._process_interval = interval
+
+  @process_rate.setter
+  def process_rate(self, process_rate):
+    self._process_interval = (1/process_rate) - BUFFER_TIME
 
   @property
   def data_size(self):
@@ -275,9 +314,41 @@ class AcquisitionObject:
       # buffer the current data
       self.data = data
 
+  def run_processing(self):
+    if self._has_processor:
+      return  # only 1 runner at a time
+
+    self._has_processor = True
+
+    results_time = time.time() - self.process_interval
+    last_data_count = 0
+
+    while True:
+      self.sleep(results_time)
+
+      data, data_count = self.data_and_count
+
+      if data_count == last_data_count:
+        results_time = time.time()
+        continue
+
+      with self._processing_lock:
+        if self._processing:
+          results_time = time.time()
+          results, process = self.do_process(
+              data, data_count, self._processing)
+          if process is not None:
+            self._processing = process
+        else:
+          self._has_processor = False
+          return
+
+      # buffer the current data
+      self.results = results
+
   def __del__(self):
     self.stop()
-    while self._has_runner:
+    while self._has_runner or self._has_processor:
       check_time = time.time()
       self.sleep(check_time)
     self.close()
