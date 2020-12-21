@@ -29,7 +29,7 @@ class Display:
 def draw_dots(frame, pose=None):
 	if pose is not None:
 		for i in range(pose.shape[0]):
-			if pose[i, 2] > 0.7:
+			if pose[i, 2] > 0.9:
 				try:
 					x=pose[i,0]
 					y=pose[i,1]

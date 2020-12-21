@@ -3,7 +3,7 @@ gaze_angle = 32.8; %degrees
 % arena_center = [562, 437]; %pixels
 if isa(arena_center,'cell')
     arena_center = cell2mat(arena_center);
-    arena_center=cast(arena_center,'double')
+    arena_center=cast(arena_center,'double');
 end
 
 D = dlmread(dlc_filename, ',', 3, 1);

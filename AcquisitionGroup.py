@@ -1,22 +1,8 @@
-import cv2
+
 import PySpin
-import numpy as np
-from scipy import signal, interpolate
-from scipy import io as sio
-import matplotlib.pyplot as plt
-import matplotlib as mpl
-import ffmpeg
-import utils.calibration_utils as cau
-import utils.image_draw_utils as idu
 import os
-import toml
+
 import threading
-from io import BytesIO
-from PIL import Image
-import time
-import pandas as pd
-from dlclive import DLCLive, Processor
-from audio_processing import read_audio
 import Camera
 import Nidaq
 
@@ -26,14 +12,16 @@ class AcquisitionGroup:
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
     self.nCameras = self._camlist.GetSize()
-    self.cameras = [Camera(self._camlist, i, frame_rate)
+    self.cameras = [Camera.Camera(self._camlist, i, frame_rate)
                     for i in range(self.nCameras)]
-    self.nidaq = Nidaq(frame_rate, audio_settings)
+    self.nidaq = Nidaq.Nidaq(frame_rate, audio_settings)
 
+    self._dlc_runners = []
     self._runners = []
     self.filepaths = None
 
-  def start(self, isDisplayed=True):
+  def start(self, filepaths=None, isDisplayed=True):
+    self.filepaths=filepaths
     if not self.filepaths:
       self.filepaths = [None] * (self.nCameras + 1)
     if not isDisplayed:
@@ -58,6 +46,7 @@ class AcquisitionGroup:
       for i, cam in enumerate(self.cameras):
         self._runners.append(threading.Thread(target=cam.run))
         self._runners[i].start()
+
       self._runners.append(threading.Thread(target=self.nidaq.run))
       self._runners[-1].start()
 
@@ -70,6 +59,16 @@ class AcquisitionGroup:
       if not self._runners[-1].is_alive():
         self._runners[-1] = threading.Thread(target=self.nidaq.run)
         self._runners[-1].start()
+
+  def run_dlc(self,path):
+    # a separate switch to turn on dlc-live
+    if not self._runners:
+      for i, cam in enumerate(self.cameras):
+        cam.dlc_model_path = path[i]
+        self._dlc_runners.append(threading.Thread(target=cam.run_dlc))
+        self._dlc_runners[i].start()
+    else:
+      raise Warning("dlc can't be turned on!")
 
   def stop(self):
     for cam in self.cameras:
@@ -88,6 +87,9 @@ class AcquisitionGroup:
 
 
 if __name__ == '__main__':
-  ag = AcquisitionGroup()
+  from main import audio_settings
+  default_model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second_try-Devon-2020-12-07\exported-models'
+  ag = AcquisitionGroup(audio_settings=audio_settings)
   ag.start()
   ag.run()
+  ag.run_dlc(path=[default_model_path,None,None,None])

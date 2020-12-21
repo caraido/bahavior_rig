@@ -9,6 +9,7 @@ from multiprocessing.pool import Pool
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import matlab.engine
+import pickle as pk
 
 def get_board_side_length_pixel(corners):
     corners=np.array(corners)
@@ -170,14 +171,19 @@ class gaze_angle:
         self.inner=None
         self.outer=None
         self.processor=18
+        self.title_name=None
+
+        self.engine = matlab.engine.start_matlab()
 
     def __call__(self,coord_path,save=True):
         # get the pose estimation path
         # coord_path = 'C:\\Users\\SchwartzLab\\Downloads\\Acclimation_videos_1\\'
-        if self.flag=='bino':
-            all_file = os.listdir(coord_path)
-            name = [a for a in all_file if '.csv' in a]
-            coord = coord_path + name[0]
+        self.title_name = os.path.split(coord_path)[-1]
+        all_file = os.listdir(coord_path)
+        name = [a for a in all_file if '.csv' and 'second' in a]
+        coord = coord_path + '\\'+name[0]
+        if self.flag == 'mono':
+
 
             # read csv data
             data = pd.read_csv(coord, header=[1, 2])
@@ -202,39 +208,59 @@ class gaze_angle:
 
             result = self.bino_interect(input_combine)
             result = pd.DataFrame(result)
-            self.inner = self.double(result, 'inner')
-            self.outer = self.double(result, 'outer')
+            self.inner = self.double_mono(result, 'inner')
+            self.outer = self.double_mono(result, 'outer')
 
             result.columns = ["inner", 'outer']
             result['inner'] = self.inner
             result["outer"] = self.outer
         else:
-            engine=matlab.engine.start_matlab()
-            result = engine.poseAnalysis(coord_path,
+
+            result = self.engine.poseAnalysis(coord,
                                          matlab.double([0.9]),
-                                         matlab.int32([int(self.outer_r_pixel)]),
-                                         matlab.int32([int(self.inner_r_pixel)]),
+                                         matlab.double([int(self.outer_r_pixel)]),
+                                         matlab.double([int(self.inner_r_pixel)]),
                                          self.circle_center.tolist()
                                          )
-            result = pd.DataFrame(result)
-            self.inner = self.double(result, 'inner')
-            self.outer = self.double(result, 'outer')
+            #result = pd.DataFrame(result)
 
-            result.columns = ["inner", 'outer']
-            result['inner'] = self.inner
-            result["outer"] = self.outer
+            outer_angles_left = np.deg2rad(np.array(result['outer_angles_left'])[:,0])
+            inner_angles_left = np.deg2rad(np.array(result['inner_angles_left'])[:,0])
+            outer_angles_right = np.deg2rad(np.array(result['outer_angles_right'])[:,0])
+            inner_angles_right = np.deg2rad(np.array(result['inner_angles_right'])[:,0])
+
+            self.inner_left = self.double_bino(inner_angles_left)
+            self.inner_right = self.double_bino(inner_angles_right)
+            self.outer_left = self.double_bino(outer_angles_left)
+            self.outer_right = self.double_bino(outer_angles_right)
+
+
+            result={'inner_left':self.inner_left[pd.notna(self.inner_left)],
+                    'inner_right': self.inner_right[pd.notna(self.inner_right)],
+                    'outer_left': self.outer_left[pd.notna(self.outer_left)],
+                    'outer_right': self.outer_right[pd.notna(self.outer_right)],
+
+            }
+
         # save file
         if save:
             self.save(coord_path, result)
 
         return result
 
-    def double(self,result,flag='inner'):
+    def double_mono(self,result,flag='inner'):
         side = result[result[1]==flag][0]
         side_right = side[side>0]
         side_left = side[side<=0]
         side = side.append(side_right-2*np.pi)
         side = side.append(side_left+2*np.pi)
+        return side
+
+    def double_bino(self,side):
+        side_right = side[side > 0]
+        side_left = side[side <= 0]
+        side = np.append(side, side_right - 2 * np.pi)
+        side = np.append(side, side_left + 2 * np.pi)
         return side
 
     def _get_window_angle(self):
@@ -270,13 +296,18 @@ class gaze_angle:
         pool.join()
         return result
 
-    def save(self,path, data:pd.DataFrame):
+    def save(self,path, data):
         path =path+'\\gaze\\'
         if not os.path.exists(path):
             os.mkdir(path)
-        data.to_csv(path+self.flag+'.csv')
+        if isinstance(data,pd.DataFrame):
+            data.to_csv(path+self.flag+'.csv')
+        else:
+            with open(path+self.flag+'.pk','wb') as f:
+                pk.dump(data,f)
 
-    def plot(self,things:list):
+
+    def plot_mono(self,things:list):
         data = things[0]
         flag =things[1]
         length = len(things)
@@ -305,14 +336,66 @@ class gaze_angle:
             plt.legend(handles, labels)
             plt.title("Viewpoint density on %s wall" % flag)
             plt.hist(k=data[i], bins=60, density=True)
-
+        plt.suptitle(self.title_name)
         plt.show()
 
+    def plot_bino(self,things:dict,savepath):
+        data = things.values()
+        flag =things.keys()
+        length = len(things)
+        if length != len(flag):
+            raise Exception("length should be the same!")
+        if length==2:
+            row=1
+            col=2
+        elif length==4:
+            row=2
+            col=2
+        else:
+            raise Exception("not implemented yet")
 
+        plt.figure(figsize=(16, 9))
+        for i in range(length):
+            plt.subplot(col, row, i+1)
+
+            plt.axvspan(xmin=self.windows[0][0][0], xmax=self.windows[0][0][1], facecolor='orange', alpha=0.3)
+            plt.axvspan(xmin=self.windows[1][0][0], xmax=self.windows[1][0][1], facecolor='red', alpha=0.3)
+            plt.axvspan(xmin=self.windows[2][0][0], xmax=self.windows[2][0][1], facecolor='magenta', alpha=0.3)
+            plt.axvspan(xmin=self.windows[0][1][0], xmax=self.windows[0][1][1], facecolor='orange', alpha=0.3)
+            plt.axvspan(xmin=self.windows[1][1][0], xmax=self.windows[1][1][1], facecolor='red', alpha=0.3)
+            plt.axvspan(xmin=self.windows[2][1][0], xmax=self.windows[2][1][1], facecolor='magenta', alpha=0.3)
+            handles = [Rectangle((0, 0), 1, 1, color=c, ec="k", alpha=0.3) for c in ['orange', 'red', 'magenta']]
+            labels = ["window A", "window B", "window C"]
+            plt.legend(handles, labels)
+            plt.title("Viewpoint density of %s " % list(flag)[i])
+            plt.hist(x=things[list(flag)[i]], bins=60, density=False)
+        plt.suptitle(self.title_name)
+        plt.savefig(savepath+'\\gaze\\gaze.jpg')
+        #plt.show()
 
 if __name__ == '__main__':
-    config_folder_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
-    img_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\test.png'
+    '''
+    config_folder_path = r'C:\\Users\\SchwartzLab\\PycharmProjects\\bahavior_rig\\config'
+    img_path = r'C:\\Users\\SchwartzLab\\PycharmProjects\\bahavior_rig\\test.png'
     config=Config(config_folder_path)
     config.set_img(img_path)
     config.get_loc_pixel()
+    '''
+    videopaths =  r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\multimedia\videos'
+    config_folder_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
+
+    videos = os.listdir(videopaths)
+
+    gaze_model = gaze_angle(config_folder_path,flag='bino')
+    for video in videos:
+        result = gaze_model(videopaths+'\\'+video,save=True)
+        gaze_model.plot_bino(result,savepath=videopaths+'\\'+video)
+
+
+
+
+
+
+
+
+
