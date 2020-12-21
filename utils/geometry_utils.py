@@ -1,15 +1,18 @@
-from sympy import *
+
 import numpy as np
 import cv2
 import toml
 import os
 import pandas as pd
-from functools import partial
-from multiprocessing.pool import Pool
+from sympy import Circle,Point
+from utils.head_angle_analysis import project_from_head_to_walls,is_in_window
+
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
-import matlab.engine
+
 import pickle as pk
+from scipy import io as sio
+
 
 def get_board_side_length_pixel(corners):
     corners=np.array(corners)
@@ -31,43 +34,118 @@ def get_r_pixel(r, corner_pixel, board):
     return resize
 
 
+def find_intersect(board1_xy, board2_xy, board1_dist, board2_dist):
+    board1_xy = Point(board1_xy[0],board1_xy[1])
+    board2_xy = Point(board2_xy[0], board2_xy[1])
+    circle1 = Circle(board1_xy,board1_dist)
+    circle2 = Circle(board2_xy, board2_dist)
+    intersect = circle1.intersect(circle2)
+    intersect = np.array(intersect.args,dtype=float)
+    return intersect
+
+def find_window(corners):
+    pass
+
+
+def _triangle_area(point1,point2,point3):
+    a=np.linalg.norm(point1-point2,axis=0)
+    b=np.linalg.norm(point3-point2,axis=0)
+    c=np.linalg.norm(point1-point3,axis=0)
+    s=(a + b + c) / 2
+    area = (s * (s - a) * (s - b) * (s - c)) ** 0.5
+    return area
+
+def triangle_area(pose):
+    snout_x = pose['snout']['x'].to_numpy()
+    snout_y = pose['snout']['y'].to_numpy()
+
+    leftear_x = pose['leftear']['x'].to_numpy()
+    leftear_y = pose['leftear']['y'].to_numpy()
+
+    rightear_x = pose['rightear']['x'].to_numpy()
+    rightear_y = pose['rightear']['y'].to_numpy()
+
+    tailbase_x = pose['rightear']['x'].to_numpy()
+    tailbase_y = pose['rightear']['y'].to_numpy()
+
+    snout=np.array([snout_x,snout_y])
+    leftear = np.array([leftear_x, leftear_y])
+    rightear = np.array([rightear_x, rightear_y])
+    tailbase = np.array([tailbase_x, tailbase_y])
+
+    head_triangle_area = _triangle_area(snout,leftear,rightear)
+    body_triangle_area = _triangle_area(tailbase,leftear,rightear)
+
+    return head_triangle_area,body_triangle_area
+
+
+def body_center(pose):
+    leftear_x = pose['leftear']['x'].to_numpy()
+    leftear_y = pose['leftear']['y'].to_numpy()
+
+    rightear_x = pose['rightear']['x'].to_numpy()
+    rightear_y = pose['rightear']['y'].to_numpy()
+
+    center = np.array([(leftear_x+rightear_x)/2,(leftear_y+rightear_y)/2])
+    return center
+
 class Config:
     def __init__(self,path:str,save_center=False):
         self.config_folder_path=path
         self.img=None
         self.config_rig=None
         self.config_top_cam=None
-        self.load_config()
-        self.circle_center=np.array(self.config_rig['recorded_center'])
-        self.window_A = np.array(self.config_rig['window_A'])
-        self.window_B = np.array(self.config_rig['window_B'])
-        self.window_C = np.array(self.config_rig['window_C'])
+        self._load_config()
+        if self.config_rig:
+            self.circle_center=np.array(self.config_rig['recorded_center'])
+            self.window_A = np.array(self.config_rig['window_A'])
+            self.window_B = np.array(self.config_rig['window_B'])
+            self.window_C = np.array(self.config_rig['window_C'])
 
         self.save_center=save_center
 
     def set_img(self,path:str):
-        try:
-            self.img = cv2.imread(path)
-        except Exception:
-            print("Wrong path! No image found")
+        self.img = cv2.imread(path)
+        if self.img is None:
+            cap=cv2.VideoCapture(path)
+            ret,frame = cap.read()
+            self.img=frame
+            cap.release()
 
-    def load_config(self):
-        dir = os.listdir(self.config_folder_path)
-        for item in dir:
-            if 'behavior_rig' in item:
-                self.config_rig=toml.load(self.config_folder_path+'\\'+item)
-            if 'extrinsic_17391304' in item:
-                self.config_top_cam = toml.load(self.config_folder_path+'\\'+item)
+    def _load_config(self):
+        last = os.path.split(self.config_folder_path)[-1]
+        if '.' not in last:
+            dir = os.listdir(self.config_folder_path)
+            for item in dir:
+                if 'behavior_rig' in item:
+                    path = os.path.join(self.config_folder_path, item)
+                    self.config_rig=toml.load(path)
+                if 'extrinsic_17391304' in item:
+                    path = os.path.join(self.config_folder_path,item)
+                    self.config_top_cam = toml.load(path)
+        elif '.toml' in last:
+            if 'behavior_rig' in last:
+                self.config_rig = toml.load(self.config_folder_path)
+            if 'extrinsic_17391304' in last:
+                self.config_top_cam = toml.load(self.config_folder_path)
+
 
         if self.config_top_cam is None or self.config_rig is None:
-            raise Exception("one or both configuration file not found")
+            print("one or both configuration file not found")
 
     def _save_center(self):
         if self.save_center:
-            with open(self.config_folder_path+'\\config_behavior_rig.toml', 'a') as f:
-                new_toml_string = toml.dump({'recorded_center':self.circle_center}, f)
-                print('saved')
-                print(new_toml_string)
+            if os.path.exists(self.config_folder_path+'\\config_behavior_rig.toml'):
+                with open(self.config_folder_path+'\\config_behavior_rig.toml', 'a') as f:
+                    new_toml_string = toml.dump({'recorded_center':self.circle_center}, f)
+                    print('saved')
+                    print(new_toml_string)
+            else:
+                with open(self.config_folder_path+'\\config_behavior_rig.toml', 'w') as f:
+                    new_toml_string = toml.dump({'recorded_center': self.circle_center}, f)
+                    print('saved')
+                    print(new_toml_string)
+
         else:
             pass
 
@@ -93,68 +171,24 @@ class Config:
                 cv2.destroyWindow("image")
                 break
 
-    def recenter(self, coord):
-        if self.circle_center is None:
-            self.circle_center=np.array(self.config_rig['recorded_center'])
-        else:
-            self.circle_center=np.array(self.circle_center)
 
-        coord=np.array(coord)
-        new_coord = coord-self.circle_center
-        return new_coord
+class Gaze_angle:
+    def __init__(self,main_config, config_folder_path,gazePoint=0.5725):
+        main_config = Config(main_config)
+        #self.circle_center = config.circle_center
+        self.corners = main_config.config_top_cam['corners']
+        self.inner_r = main_config.config_rig['inner_r']
+        self.outer_r = main_config.config_rig['outer_r_']
+        self.board_size = main_config.config_rig['board_size']
 
-
-def find_interection(combined,circle_center,inner_r, outer_r):
-    origin=combined[0]
-    point=combined[1]
-    origin_= Point(origin[0],origin[1])
-    point_ = Point(point[0],point[1])
-    circle_center_ = Point(circle_center[0], circle_center[1])
-
-    ray=Ray(origin_, point_)
-    inner_circle = Circle(circle_center_, sympify(str(inner_r),rational=True))
-    outer_circle = Circle(circle_center_, sympify(str(outer_r),rational=True))
-
-    radius = np.sqrt((origin[0]-circle_center[0])**2 + (origin[1]-circle_center[1])**2)
-    if radius>outer_r or radius<inner_r:
-        angle=None
-        flag='NaN'
-    else:
-        intersect=intersection(ray,inner_circle)
-
-        if not intersect:
-            intersect = intersection(ray,outer_circle)
-            flag = 'outer'
-        else:
-            flag = 'inner'
-
-        if len(intersect)>1:
-            dics=[]
-            for intsc in intersect:
-                dics.append(intsc.distance(origin_))
-            dics=np.array(dics).astype(np.float64)
-            i=np.argmin(dics)
-            intersect=intersect[i]
-        else:
-            intersect=intersect[0]
-
-        intersect_center = np.array(intersect).astype(np.float64)-circle_center
-        angle = np.arctan2(intersect_center[1],intersect_center[0])
-    return angle, flag
-
-
-class gaze_angle:
-    def __init__(self,config_folder_path,flag='bino'):
-        config = Config(config_folder_path)
-        self.circle_center = config.circle_center
-        self.corners = config.config_top_cam['corners']
-        self.inner_r = config.config_rig['inner_r']
-        self.outer_r = config.config_rig['outer_r_']
-        self.board_size = config.config_rig['board_size']
-
-        self.windowA = config.window_A
-        self.windowB = config.window_B
-        self.windowC = config.window_C
+        #self.windowA = config.window_A
+        #self.windowB = config.window_B
+        #self.windowC = config.window_C
+        local_config = toml.load(config_folder_path)
+        self.windowA = np.array([local_config['A1'],local_config['A2']])
+        self.windowB = np.array([local_config['B1'], local_config['B2']])
+        self.windowC = np.array([local_config['C1'], local_config['C2']])
+        self.circle_center = np.array(local_config['recorded_center'])
 
         self.windows = self._get_window_angle()
 
@@ -163,100 +197,94 @@ class gaze_angle:
         self.inner_r_pixel = get_r_pixel(self.inner_r, corners_pixel, self.board_size)
         self.outer_r_pixel = get_r_pixel(self.outer_r, corners_pixel, self.board_size)
 
-        if flag=='mono' or flag=='bino':
-            self.flag=flag
-        else:
-            raise ValueError("flag can only be mono or bino")
-
         self.inner=None
         self.outer=None
-        self.processor=18
         self.title_name=None
+        self.gazePoint=gazePoint
 
-        self.engine = matlab.engine.start_matlab()
+       # self.engine = matlab.engine.start_matlab()
 
-    def __call__(self,coord_path,save=True):
+    def __call__(self,root_path, save=True):
         # get the pose estimation path
         # coord_path = 'C:\\Users\\SchwartzLab\\Downloads\\Acclimation_videos_1\\'
-        self.title_name = os.path.split(coord_path)[-1]
-        all_file = os.listdir(coord_path)
-        name = [a for a in all_file if '.csv' and 'second' in a]
-        coord = coord_path + '\\'+name[0]
-        if self.flag == 'mono':
+        self.title_name = os.path.split(root_path)[-1]
+        all_file = os.listdir(root_path)
+        name = [a for a in all_file if 'second' in a and 'csv' in a]
+        coord = os.path.join(root_path,name[0])
+        pose = pd.read_csv(coord,header=[1,2])
 
 
-            # read csv data
-            data = pd.read_csv(coord, header=[1, 2])
-            data_length = data.shape[0]
+        # gaze
+        inner_left,outer_left, inner_right, outer_right = project_from_head_to_walls(pose,
+                                                                                      self.inner_r_pixel,
+                                                                                      self.outer_r_pixel,
+                                                                                      self.circle_center[np.newaxis, :],
+                                                                                      gazePoint=self.gazePoint)
+        # triangle area
+        head_triangle_area,body_triangle_area = triangle_area(pose)
 
-            # get the locations of the dots
-            snoutx = data['snout']['x']
-            snouty = data['snout']['y']
+        # body center
+        body = body_center(pose)
+        recenter_body = body-self.circle_center[:,np.newaxis]
+        arc_body = np.arctan2(recenter_body[1],recenter_body[0])[:,np.newaxis]
 
-            rightearx = data['rightear']['x']
-            righteary = data['rightear']['y']
+        # in window
+        A_right = np.sum(is_in_window(outer_right,self.windowA,self.circle_center))
+        B_right = np.sum(is_in_window(outer_right, self.windowB, self.circle_center))
+        C_right = np.sum(is_in_window(outer_right, self.windowC, self.circle_center))
 
-            leftearx = data['leftear']['x']
-            lefteary = data['leftear']['y']
+        A_left = np.sum(is_in_window(outer_left, self.windowA, self.circle_center))
+        B_left = np.sum(is_in_window(outer_left, self.windowB, self.circle_center))
+        C_left = np.sum(is_in_window(outer_left, self.windowC, self.circle_center))
 
-            between_earsx = (np.array(leftearx) + np.array(rightearx)) / 2
-            between_earsy = (np.array(lefteary) + np.array(righteary)) / 2
+        A_body = np.sum(is_in_window(arc_body, self.windowA, self.circle_center))
+        B_body = np.sum(is_in_window(arc_body, self.windowB, self.circle_center))
+        C_body = np.sum(is_in_window(arc_body, self.windowC, self.circle_center))
 
-            # get the direction of the dot
-            input_combine = [([between_earsx[i], between_earsy[i]], [np.array(snoutx)[i], np.array(snouty)[i]]) for i in
-                             range(data_length)]
+        A_weight_right = A_right /  (A_right + B_right + C_right)
+        B_weight_right = B_right / (A_right + B_right + C_right)
+        C_weight_right = C_right / (A_right + B_right + C_right)
 
-            result = self.bino_interect(input_combine)
-            result = pd.DataFrame(result)
-            self.inner = self.double_mono(result, 'inner')
-            self.outer = self.double_mono(result, 'outer')
+        A_weight_left = A_left / (A_left + B_left + C_left)
+        B_weight_left = B_left / (A_left + B_left + C_left)
+        C_weight_left = C_left / (A_left + B_left + C_left)
 
-            result.columns = ["inner", 'outer']
-            result['inner'] = self.inner
-            result["outer"] = self.outer
-        else:
+        A_weight_body = A_body / (A_body + B_body + C_body)
+        B_weight_body = B_body / (A_body + B_body + C_body)
+        C_weight_body = C_body / (A_body + B_body + C_body)
 
-            result = self.engine.poseAnalysis(coord,
-                                         matlab.double([0.9]),
-                                         matlab.double([int(self.outer_r_pixel)]),
-                                         matlab.double([int(self.inner_r_pixel)]),
-                                         self.circle_center.tolist()
-                                         )
-            #result = pd.DataFrame(result)
+        winPreference_right = ((A_right + B_right + C_right) / len(pd.isna(outer_right))) * 360 / 99
+        winPreference_left = ((A_left + B_left + C_left) / len(pd.isna(outer_left))) * 360 / 99
+        winPreference_body = ((A_body + B_body + C_body) / len(pd.isna(arc_body))) * 360 / 99
 
-            outer_angles_left = np.deg2rad(np.array(result['outer_angles_left'])[:,0])
-            inner_angles_left = np.deg2rad(np.array(result['inner_angles_left'])[:,0])
-            outer_angles_right = np.deg2rad(np.array(result['outer_angles_right'])[:,0])
-            inner_angles_right = np.deg2rad(np.array(result['inner_angles_right'])[:,0])
+        table = np.array([A_weight_right,B_weight_right,C_weight_right,winPreference_right,
+                          A_weight_left,B_weight_left,C_weight_left,winPreference_left,
+                          A_weight_body,B_weight_body,C_weight_body,winPreference_body
+                          ]).reshape([3,4])
+        column = ['windowA','windowB','windowC','window preference']
+        index = ['right','left','body']
+        stats=pd.DataFrame(table,columns=column,index=index)
+        stats=stats.to_dict()
 
-            self.inner_left = self.double_bino(inner_angles_left)
-            self.inner_right = self.double_bino(inner_angles_right)
-            self.outer_left = self.double_bino(outer_angles_left)
-            self.outer_right = self.double_bino(outer_angles_right)
-
-
-            result={'inner_left':self.inner_left[pd.notna(self.inner_left)],
-                    'inner_right': self.inner_right[pd.notna(self.inner_right)],
-                    'outer_left': self.outer_left[pd.notna(self.outer_left)],
-                    'outer_right': self.outer_right[pd.notna(self.outer_right)],
-
-            }
+        result = {'inner_left': inner_left,
+                  'inner_right': inner_right,
+                  'outer_left': outer_left,
+                  'outer_right': outer_right,
+                  'head_triangle_area':head_triangle_area,
+                  'body_triangle_area':body_triangle_area,
+                  'body_position':arc_body,
+                  'stats':stats
+                  }
 
         # save file
         if save:
-            self.save(coord_path, result)
+            self.save(root_path, result)
+            print('saved')
 
         return result
 
-    def double_mono(self,result,flag='inner'):
-        side = result[result[1]==flag][0]
-        side_right = side[side>0]
-        side_left = side[side<=0]
-        side = side.append(side_right-2*np.pi)
-        side = side.append(side_left+2*np.pi)
-        return side
-
-    def double_bino(self,side):
+    def double(self,side):
+        side=side[pd.notna(side)]
         side_right = side[side > 0]
         side_left = side[side <= 0]
         side = np.append(side, side_right - 2 * np.pi)
@@ -284,46 +312,26 @@ class gaze_angle:
 
         return combine
 
-    def bino_interect(self,input_array):
-        par = partial(find_interection,
-                      circle_center=self.circle_center,
-                      inner_r=self.inner_r_pixel,
-                      outer_r=self.outer_r_pixel
-                      )
-        pool=Pool(processes=self.processor)
-        result = pool.map(par, input_array)
-        pool.close()
-        pool.join()
-        return result
-
     def save(self,path, data):
-        path =path+'\\gaze\\'
+        path =os.path.join(path,'gaze')
         if not os.path.exists(path):
             os.mkdir(path)
         if isinstance(data,pd.DataFrame):
-            data.to_csv(path+self.flag+'.csv')
+            data.to_csv(os.path.join(path,'all_gaze_angle_%d.csv'%int(self.gazePoint*180/np.pi)))
         else:
-            with open(path+self.flag+'.pk','wb') as f:
-                pk.dump(data,f)
+            filename = os.path.join(path,'all_gaze_angle_%d.mat'%int(self.gazePoint*180/np.pi))
+            matname = 'gaze_angle_%d.mat'%int(self.gazePoint*180/np.pi)
+            sio.savemat(filename,{matname:data})
 
+    def plot(self,things:dict,savepath=None,show=False):
 
-    def plot_mono(self,things:list):
-        data = things[0]
-        flag =things[1]
-        length = len(things)
-        if length != len(flag):
-            raise Exception("length should be the same!")
-        if length==2:
-            row=1
-            col=2
-        elif length==4:
-            row=2
-            col=2
-        else:
-            raise Exception("not implemented yet")
+        keys = ['inner_left','inner_right','outer_left','outer_right','body_position']
+        row=4
+        col=2
 
-        for i in range(length):
-            plt.subplot(col, row, i)
+        plt.figure(figsize=(14, 16))
+        for i in range(len(keys)):
+            plt.subplot(row, col, i+1)
 
             plt.axvspan(xmin=self.windows[0][0][0], xmax=self.windows[0][0][1], facecolor='orange', alpha=0.3)
             plt.axvspan(xmin=self.windows[1][0][0], xmax=self.windows[1][0][1], facecolor='red', alpha=0.3)
@@ -334,62 +342,58 @@ class gaze_angle:
             handles = [Rectangle((0, 0), 1, 1, color=c, ec="k", alpha=0.3) for c in ['orange', 'red', 'magenta']]
             labels = ["window A", "window B", "window C"]
             plt.legend(handles, labels)
-            plt.title("Viewpoint density on %s wall" % flag)
-            plt.hist(k=data[i], bins=60, density=True)
-        plt.suptitle(self.title_name)
-        plt.show()
+            plt.title("Gaze point density of %s " % list(keys)[i])
+            plt.hist(x=self.double(things[list(keys)[i]]), bins=60, density=False)
+        plt.suptitle(self.title_name +' gaze angle %d'%float(self.gazePoint*180/np.pi),fontsize=30)
 
-    def plot_bino(self,things:dict,savepath):
-        data = things.values()
-        flag =things.keys()
-        length = len(things)
-        if length != len(flag):
-            raise Exception("length should be the same!")
-        if length==2:
-            row=1
-            col=2
-        elif length==4:
-            row=2
-            col=2
-        else:
-            raise Exception("not implemented yet")
+        plt.subplot(4,1,4)
+        plt.axis('off')
+        stats = things['stats']
+        stats = pd.DataFrame(stats)
 
-        plt.figure(figsize=(16, 9))
-        for i in range(length):
-            plt.subplot(col, row, i+1)
+        cell_text = []
+        for row in range(len(stats)):
+            cell_text.append(['%1.2f' % x for x in stats.iloc[row]])
 
-            plt.axvspan(xmin=self.windows[0][0][0], xmax=self.windows[0][0][1], facecolor='orange', alpha=0.3)
-            plt.axvspan(xmin=self.windows[1][0][0], xmax=self.windows[1][0][1], facecolor='red', alpha=0.3)
-            plt.axvspan(xmin=self.windows[2][0][0], xmax=self.windows[2][0][1], facecolor='magenta', alpha=0.3)
-            plt.axvspan(xmin=self.windows[0][1][0], xmax=self.windows[0][1][1], facecolor='orange', alpha=0.3)
-            plt.axvspan(xmin=self.windows[1][1][0], xmax=self.windows[1][1][1], facecolor='red', alpha=0.3)
-            plt.axvspan(xmin=self.windows[2][1][0], xmax=self.windows[2][1][1], facecolor='magenta', alpha=0.3)
-            handles = [Rectangle((0, 0), 1, 1, color=c, ec="k", alpha=0.3) for c in ['orange', 'red', 'magenta']]
-            labels = ["window A", "window B", "window C"]
-            plt.legend(handles, labels)
-            plt.title("Viewpoint density of %s " % list(flag)[i])
-            plt.hist(x=things[list(flag)[i]], bins=60, density=False)
-        plt.suptitle(self.title_name)
-        plt.savefig(savepath+'\\gaze\\gaze.jpg')
-        #plt.show()
+        table = plt.table(cellText=cell_text,colLabels=stats.columns,rowLabels=stats.index,loc='center',cellLoc='center')
+        table.auto_set_font_size(False)
+        table.set_fontsize(20)
+        table.scale(1,3)
+
+        if savepath:
+            plt.savefig(os.path.join(savepath,'gaze','gaze_angle_%d.jpg'%float(self.gazePoint*180/np.pi)))
+
+        if show:
+            plt.show()
 
 if __name__ == '__main__':
+    #import matlab.engine
     '''
     config_folder_path = r'C:\\Users\\SchwartzLab\\PycharmProjects\\bahavior_rig\\config'
     img_path = r'C:\\Users\\SchwartzLab\\PycharmProjects\\bahavior_rig\\test.png'
-    config=Config(config_folder_path)
-    config.set_img(img_path)
-    config.get_loc_pixel()
+  
+    path = r'C:\\Users\\SchwartzLab\\PycharmProjects\\bahavior_rig\\multimedia\\unprocessed_videos'
+    folders = os.listdir(path)[8:]
+    for folder in folders:
+        ob = Config(path + '\\' + folder, save_center=True)
+        video_path = path + '\\' + folder + '\\camera_17391304.MOV'
+        ob.set_img(video_path)
+        ob.get_loc_pixel()
+
     '''
-    videopaths =  r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\multimedia\videos'
-    config_folder_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
+    videopaths =  'C:\\Users\\SchwartzLab\\PycharmProjects\\bahavior_rig\\multimedia\\videos'
+    config_folder_path = 'C:\\Users\\SchwartzLab\\PycharmProjects\\bahavior_rig\\config'
 
     videos = os.listdir(videopaths)
 
-    gaze_model = gaze_angle(config_folder_path,flag='bino')
     for video in videos:
-        result = gaze_model(videopaths+'\\'+video,save=True)
-        gaze_model.plot_bino(result,savepath=videopaths+'\\'+video)
+        if not video.startswith('.'):
+            config_folder_path2 = os.path.join(videopaths, video ,'config_behavior_rig.toml')
+            gaze_model = Gaze_angle(main_config=config_folder_path,config_folder_path=config_folder_path2,gazePoint=0)
+            result = gaze_model(os.path.join(videopaths,video),save=True)
+            gaze_model.plot(result,savepath=os.path.join(videopaths,video),show=False)
+            #Gaze_model.plot(result,flag='mono', savepath=videopaths + '\\' + video)
+
 
 
 
