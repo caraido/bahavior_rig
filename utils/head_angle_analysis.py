@@ -160,15 +160,64 @@ def project_from_head_to_walls(pose, radiusInner, radiusOuter, center, gazePoint
 
 
 def is_in_window(theta, centers, arcLength):
-  #given an array of angles theta, return a bool array of equal size for each window if the theta is contained by that window
+  # given an array of angles theta, return a bool array of equal size for each window if the theta is contained by that window
+
+  # we will assume that the input theta is in radians normalized to [-pi, +pi]
+  # we assume that theta is np.shape == (t,1) and centers is np.shape === (1,N)
 
   halfWidth = arcLength / 2
 
-  #for each window, angle: 
-    #if center[i] - halfWidth < theta[j] < center[i] + halfWidth: return true
-    #else return false
-  
-  
+  distance = (theta - centers + 3*np.pi) % (2*np.pi) - np.pi
+
+  return np.logical_and(distance <= halfWidth, distance >= -halfWidth)
+
+  # for each window, angle:
+  # if center[i] - halfWidth < theta[j] < center[i] + halfWidth: return true
+  # else return false
+
+
+def body_center_angle(pose, center):
+  # get centroid of polygon enclosed by snout, ears, and tailbase
+  left_ear = np.stack((
+      pose['leftear']['x'],
+      pose['leftear']['y'],
+  )).transpose()  # should be t-by-2
+  right_ear = np.stack((
+      pose['rightear']['x'],
+      pose['rightear']['y'],
+  )).transpose()  # should be t-by-2
+  snout = np.stack((
+      pose['snout']['x'],
+      pose['snout']['y'],
+  )).transpose()  # should be t-by-2
+  tailbase = np.stack((
+      pose['tailbase']['x'],
+      pose['tailbase']['y'],
+  )).transpose()  # should be t-by-2
+
+  A = np.zeros(left_ear.shape[0])
+  centroid = np.zeros(left_ear.shape)
+
+  a_i = left_ear[:, 0] * snout[:, 1] - snout[:, 0]*left_ear[:, 1]
+  centroid += (left_ear + snout)*a_i[:, np.newaxis]
+  A += a_i
+
+  a_i = snout[:, 0] * right_ear[:, 1] - snout[:, 0] * right_ear[:, 1]
+  centroid += (snout + right_ear) * a_i[:, np.newaxis]
+  A += a_i
+
+  a_i = right_ear[:, 0] * tailbase[:, 1] - right_ear[:, 0] * tailbase[:, 1]
+  centroid += (right_ear + tailbase) * a_i[:, np.newaxis]
+  A += a_i
+
+  a_i = tailbase[:, 0] * left_ear[:, 1] - tailbase[:, 0] * left_ear[:, 1]
+  centroid += (tailbase + left_ear) * a_i[:, np.newaxis]
+  A += a_i
+
+  # note we end up with twice the area here
+  centroid /= 3*A[:, np.newaxis]
+
+  return angle_2pi(centroid - center)
 
 
 if __name__ == '__main__':
@@ -182,19 +231,30 @@ if __name__ == '__main__':
   snout_x = np.array([1.5, -1.5, 0])
   snout_y = np.array([1.5, 1.5, -1.1])
 
+  tailbase_x = np.array([1.5, -1.5, 0])
+  tailbase_y = np.array([1.0, 1.0, -1.6])
+
   pose = DataFrame(
       {'leftear': {
           'x': leftear_x,
-          'y': leftear_y
+          'y': leftear_y,
       }, 'rightear': {
           'x': rightear_x,
           'y': rightear_y,
       }, 'snout': {
           'x': snout_x,
           'y': snout_y,
+      }, 'tailbase': {
+          'x': tailbase_x,
+          'y': tailbase_y,
       }})
 
   tLI, tLO, tRI, tRO = project_from_head_to_walls(
       pose, 1, 2, np.array([0, 0])[np.newaxis, :], 32.8/180*np.pi)
 
-  print(tLI, tLO, tRI, tRO)
+  print('Simulated eye angles: ', tLI, tLO, tRI, tRO)
+
+  windows = np.array([.5236, 2.618, -1.571])[np.newaxis, :]
+  print(is_in_window(tLO, windows, .175), is_in_window(tRO, windows, .175))
+
+  print(body_center_angle(pose, np.array([0, 0])[np.newaxis, :]))
