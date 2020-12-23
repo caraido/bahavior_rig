@@ -15,7 +15,7 @@ class AcquisitionGroup:
                     for i in range(self.nCameras)]
     self.nidaq = Nidaq(frame_rate, audio_settings)
     self.children = self.cameras + [self.nidaq]
-    self.nChildren = nCameras + 1
+    self.nChildren = self.nCameras + 1
 
     self._processors = [None] * self.nChildren
     self._runners = [None] * self.nChildren
@@ -62,19 +62,13 @@ class AcquisitionGroup:
       #   self._runners[-1].start()
 
   def process(self, i, options):
-    if self._processors[i] is None or not self._processors[i].is_alive():
-      self.children[i].processing = options
-      self._processors[i] = threading.Thread(
-          target=self.children[i].run_processing)
-      self._processors[i].start()
-      # a separate switch to turn on dlc-live
-      # if not self._runners:
-      #   for i, cam in enumerate(self.cameras):
-      #     cam.dlc_model_path = path[i]
-      #     self._dlc_runners.append(threading.Thread(target=cam.run_processing))
-      #     self._dlc_runners[i].start()
-      # else:
-      #   raise Warning("dlc can't be turned on!")
+    # if it's recording, process() shouldn't be run.
+    if self.filepaths is None:
+      if self._processors[i] is None or not self._processors[i].is_alive():
+        self.children[i].processing = options
+        self._processors[i] = threading.Thread(
+            target=self.children[i].run_processing)
+        self._processors[i].start()
 
   def stop(self):
     # for cam in self.cameras:
@@ -82,6 +76,8 @@ class AcquisitionGroup:
     # self.nidaq.stop()  # make sure cameras are stopped before stopping triggers
     for child in self.children:
       child.stop()
+    del self
+    self._processors = [None] * self.nChildren
 
     # TODO: should be able to remove this
     os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
@@ -98,7 +94,20 @@ class AcquisitionGroup:
 if __name__ == '__main__':
   from main import audio_settings
   default_model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second_try-Devon-2020-12-07\exported-models'
+  filepaths = r'C:\Users\SchwartzLab\Desktop'
   ag = AcquisitionGroup(audio_settings=audio_settings)
+  # preview
   ag.start()
   ag.run()
-  ag.process(0, {'mode': 'DLC', 'modelpath': default_model_path})
+
+  # calibration/dlc
+  ag.process(0, {'mode': 'DLC', 'modelpath': default_model_path}) #'DLC'/'extrinsic'/'intrinsic'
+  ag.stop() # saving calibration stuff
+
+  # record
+  ag.start(filepaths=[filepaths,filepaths,filepaths,filepaths])
+  ag.run()
+
+  ag.process(0,{'mode': 'DLC', 'modelpath': default_model_path}) # this shouldn't work when there's file path
+
+  ag.stop() # after this there should be post processing?

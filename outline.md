@@ -75,11 +75,11 @@
 		- [x] predisplay() will take frame, and can call idu.draw_dots on self.pose
 		- [x] move the cv2.putText into predisplay()
 	- [ ] Alec: calibration
-		- [ ] make sure that we're preventing calibration during dlc, saving (dlc_switch, start, and calibration_switch)
-			- [ ] update: calibration is prevented during dlc...
+		- [x] make sure that we're preventing calibration during dlc, saving (dlc_switch, start, and calibration_switch)
+			- [x] update: calibration is prevented during dlc...
 		- [x] maybe we'll make a thread for calibration, and will have a while loop accessing self._frame_lock, copying self.frame, and feeding to intrinsic_calibration() etc. 
-		- [ ] move intrinsic_calibration to Calib.process_frame(frame)? Calib object should store the text and corners, ids
-			- [ ] update: see Camera.do_process(). Calib.do_process() or whatever should return a results dict
+		- [x] move intrinsic_calibration to Calib.process_frame(frame)? Calib object should store the text and corners, ids
+			- [x] update: see Camera.do_process(). Calib.do_process() or whatever should return a results dict
 		- [x] Camera.predisplay() will call Calib.draw_on_frame(frame)
 	- [x] update to inherit from AcquisitionObject
 - Nidaq

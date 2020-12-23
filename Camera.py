@@ -15,9 +15,11 @@ DLC_RESIZE = 0.6  # resize the frame by this factor for DLC
 DLC_UPDATE_EACH = 3  # frame interval for DLC update
 
 
+
 class Camera(AcquisitionObject):
 
   def __init__(self, camlist, index, frame_rate):
+
     self._spincam = camlist.GetByIndex(index)
     self._spincam.Init()
 
@@ -43,7 +45,10 @@ class Camera(AcquisitionObject):
       process['mode'] = 'DLC'
       process['processor'] = Processor()
       process['DLCLive'] = DLCLive(
-          model_path=options['modelpath'], processor=process['processor'], display=False, resize=DLC_RESIZE)
+                                    model_path=options['modelpath'],
+                                    processor=process['processor'],
+                                    display=False,
+                                    resize=DLC_RESIZE)
       process['frame0'] = True
       return process
     else:  # mode should be 'intrinsic' or 'extrinsic'
@@ -51,19 +56,22 @@ class Camera(AcquisitionObject):
 
       # could move this to init if desired
       process['calibrator'] = Calib(options['mode'])
-
-      process['calibrator'].reset()
+      process['calibrator'].root_config_path= self.file
+      #process['calibrator'].reset()
       if options['mode'] == 'extrinsic':
-        process['calibrator'].load_config(self.device_serial_number)
+        process['calibrator'].load_ex_config(self.device_serial_number)
 
   def end_processing(self, process):
     if process['mode'] == 'DLC':
       process['DLCLive'].close()
       process['frame0'] = False
+      status = 'DLC Live turned off'
     else:
-      process['calibrator'].save_config(
+      status = process['calibrator'].save_config(
           self.device_serial_number, self.width, self.height)
       del process['calibrator']  # could move this to close if desired
+    # TODO:status should be put on the screen!
+    return status
 
   def do_process(self, data, data_count, process):
     if process['mode'] == 'DLC':
@@ -75,11 +83,13 @@ class Camera(AcquisitionObject):
       else:
         return process['DLCLive'].get_pose(data), None
     elif process['mode'] == 'intrinsic':
-      result = self.intrinsic_calibration(data, process)
+      result = process['calibrator'].in_calibrate(data,data_count)
+      #result = self.intrinsic_calibration(data, process)
+      return result, None
     elif process['mode'] == 'extrinsic':
-      result = self.extrinsic_calibration(data, process)
-
-    return result, None
+      result = process['calibrator'].ex_calibrate(data, process)
+    #  result = self.extrinsic_calibration(data, process)
+      return result, None
 
   def capture(self, data):
     while True:
@@ -110,7 +120,7 @@ class Camera(AcquisitionObject):
 
   def open_file(self, filepath):
     return ffmpeg \
-        .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}') \
+        .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}',framerate=self.run_rate) \
         .output(filepath, vcodec='libx265') \
         .overwrite_output() \
         .run_async(pipe_stdin=True)
@@ -163,111 +173,8 @@ class Camera(AcquisitionObject):
   #                                 self.height)
   #     # return self.display()
 
-  def intrinsic_calibration(self, frame, process):
-    # write something on the frame
-    # text = 'Intrinsic calibration mode On'
-    # cv2.putText(frame, text, (50, 50),
-    #             cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 125), 2)
 
-    # get corners and refine them in openCV for every 3 frames
-    if process['calibrator'].decimator % 3 == 0:  # TODO: move 3 to a constant at top of file
-      # TODO: we probably don't need the calib object to store the decimator... just get the frame count from do_process
-      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-          frame, process['calibrator'].board.dictionary, parameters=process['calibrator'].params)
-      detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
-          cv2.aruco.refineDetectedMarkers(frame, process['calibrator'].board, corners, ids,
-                                          rejectedImgPoints, parameters=process['calibrator'].params)
-
-      # interpolate corners and draw corners
-      if len(detectedCorners) > 0:
-        rest, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
-            detectedCorners, detectedIds, frame, process['calibrator'].board)
-        if detectedCorners is not None and 2 <= len(
-                detectedCorners) <= process['calibrator'].max_size:
-          process['calibrator'].allCorners.append(detectedCorners)
-          process['calibrator'].allIds.append(detectedIds)
-        # cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
-    process['calibrator'].decimator += 1
-
-    return {'corners': corners, 'ids': ids}
-
-  def extrinsic_calibration(self, frame):
-    # if there isn't configuration on the screen, save corners and ids
-    allAligns = False  # TODO fix the logic here
-    if process['calibrator'].config is None:
-      # text = 'No configuration file found. Performing initial extrinsic calibration... '
-      # cv2.putText(frame, text, (50, 50),
-      #             cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-
-      # calibrate every 3 frames
-      if process['calibrator'].decimator % 3 == 0:  # TODO: move to constant at top of file
-        # get parameters
-        params = process['calibrator'].params
-
-        # detect corners
-        corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-            frame, process['calibrator'].board.dictionary, parameters=params)
-        if ids is not None:
-          # draw corners on the screen
-          # cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
-
-          if len(ids) >= len(process['calibrator'].allIds):
-            process['calibrator'].allCorners = corners
-            process['calibrator'].allIds = ids
-    else:
-      # text = 'Found configuration file for this camera. Calibrating...'
-      # cv2.putText(frame, text, (50, 50),
-      #             cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-
-      if True:  # process['calibrator'].decimator % 3 == 0:
-        truecorners = process['calibrator'].config['corners']  # float numbers
-        trueids = process['calibrator'].config['ids']  # int numbers
-        CI = process['calibrator'].config['CI']  # int pixels
-        markers = process['calibrator'].config['markers']
-
-        # key step: detect markers
-        corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-            frame, process['calibrator'].board.dictionary, parameters=process['calibrator'].params)
-
-        # make sure there are ids and markers and the number of ids is no less than 3
-        if cau.check_ids(ids) and cau.check_corners(corners):
-
-          # check if aligned:
-          aligns, colors = cau.get_align_color(
-              ids, corners, trueids, truecorners, CI)
-
-          markers['aligns'] = pd.Series(
-              aligns, index=list(map(str, cau.reformat(ids))))
-          markers['colors'] = pd.Series(
-              colors, index=list(map(str, cau.reformat(ids))))
-
-          # any way to make it more concise?
-          for tid, truecorner in zip(trueids, truecorners):
-            real_color = int(markers['colors'][tid]) if pd.notna(
-                markers['colors'][tid]) else 200
-            point1 = tuple(np.array(truecorner[0], np.int))
-            point2 = tuple(np.array(truecorner[1], np.int))
-            point3 = tuple(np.array(truecorner[2], np.int))
-            point4 = tuple(np.array(truecorner[3], np.int))
-            cv2.line(frame, point1, point2, color=real_color, thickness=CI*2)
-            cv2.line(frame, point2, point3, color=real_color, thickness=CI*2)
-            cv2.line(frame, point3, point4, color=real_color, thickness=CI*2)
-            cv2.line(frame, point4, point1, color=real_color, thickness=CI*2)
-          # draw the detected markers on top of the true markers.
-          # cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
-
-          allAligns = all(aligns)
-          #   text = 'Enough corners aligned! Ready to go'
-          #   cv2.putText(frame, text, (500, 1000),
-          #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-          # else:
-          #   text = "Missing ids or corners!"
-          #   cv2.putText(frame, text, (500, 1000),
-          #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-      process['calibrator'].decimator += 1
-    return {'corners': corners, 'ids': ids, 'allAligns': allAligns}
-
-  def predisplay(self, data):
+  def predisplay(self, frame):
     # TODO: make sure text is not overlapping
     process = self.processing
 
@@ -275,9 +182,9 @@ class Camera(AcquisitionObject):
       results = self.results
       if results is not None:
         if process['mode'] == 'DLC':
-          draw_dots(data, results)
+          draw_dots(frame, results)
         else:
-          cv2.putText(frame, f'Performing {process['mode']} calibration', (50, 50),
+          cv2.putText(frame, f"Performing {process['mode']} calibration", (50, 50),
                       cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 125), 2)
 
           cv2.aruco.drawDetectedMarkers(
@@ -288,10 +195,10 @@ class Camera(AcquisitionObject):
               text = 'No configuration file found. Performing initial extrinsic calibration... '
             else:
               text = 'Found configuration file for this camera. Calibrating...'
-              cv2.putText(frame, text, (50, 60),
+            cv2.putText(frame, text, (50, 60),
                           cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
-            if results['allAligns']):
+            if results['allAligns']:
               text='Enough corners aligned! Ready to go'
             else:
               text="Missing ids or corners!"
@@ -301,10 +208,10 @@ class Camera(AcquisitionObject):
 
     if self.file is not None:
       text='recording...'
-      cv2.putText(data, text, (700, 50),
+      cv2.putText(frame, text, (700, 50),
                   cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
 
-      return data
+      return frame
 
   def close(self):
     self._spincam.DeInit()
