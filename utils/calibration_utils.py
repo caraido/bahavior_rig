@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 import itertools
 from time import time
+import time
 import os
 import matplotlib.pyplot as plt
 import matplotlib as mpl
@@ -272,7 +273,11 @@ class Calib:
   def root_config_path(self,path):
     if path is not None:
       if os.path.exists(path):
-        self._root_config_path = os.path.join(path,'calibration')
+        try:
+          os.mkdir(os.path.join(path,'config')) # is it needed?
+        except:
+          pass
+        self._root_config_path = os.path.join(path,'config')
       else:
         raise FileExistsError("root file folder doens't exist!")
     else:
@@ -287,7 +292,7 @@ class Calib:
     items = os.listdir(self.load_path)
     for item in items:
       if camera_serial_number in item and self.type in item:
-        path = os.path.join(self.load_path, 'config_%s_%d.toml'%(self.type,camera_serial_number))
+        path = os.path.join(self.load_path, 'config_%s_%d.toml'%(self.type, camera_serial_number))
         with open(path, 'r') as f:
           # there only should be only one calib file for each camera
           self.config = toml.load(f)
@@ -302,7 +307,7 @@ class Calib:
 
   def save_config(self, camera_serial_number, width, height):
     save_path = os.path.join(self.root_config_path, 'config_%s_%d.toml'%(self.type,camera_serial_number))
-    save_copy_path = self.load_path
+    save_copy_path = self.load_path # overwrite
 
     if os.path.exists(save_path):
       return 'Configuration file already exists.'
@@ -315,6 +320,7 @@ class Calib:
                                     width,
                                     height)
         param['camera_serial_number'] = camera_serial_number
+        param['date'] = time.strftime("%Y-%m-%d-_%H:%M:%S",time.localtime())
         if len(param) > 1:
           with open(save_path, 'w') as f:
             toml.dump(param, f)
@@ -322,17 +328,21 @@ class Calib:
           with open(save_copy_path,'w') as f:
             toml.dump(param, f)
 
-          return 'intrinsic calibration configuration saved!'
+          return "intrinsic calibration configuration saved!"
         else:
           return "intrinsic calibration configuration NOT saved due to lack of markers."
       else:
         if self.allIds is not None and not len(self.allIds) < self.max_size+1:
           param = {'corners': np.array(self.allCorners),
                    'ids': np.array(self.allIds), 'CI': 5,
-                   'camera_serial_number': camera_serial_number}
+                   'camera_serial_number': camera_serial_number,
+                   'date': time.strftime("%Y-%m-%d-_%H:%M:%S",time.localtime())}
           with open(save_path, 'w') as f:
             toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
-            return 'extrinsic calibration configuration saved!'
+          with open(save_copy_path,'w') as f:
+            toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
+
+          return 'extrinsic calibration configuration saved!'
         else:
           return "failed to record all Ids! Can't save configuration. Please calibrate again."
 
@@ -363,7 +373,31 @@ class Calib:
     else:
       return {'corners':[],'ids':[]}
 
-  def ex_calibrate(self,frame,data_count):
+  def ex_calibrate2(self,frame, data_count):
+    allDetected = False
+    if data_count % CALIB_UPDATE_EACH ==0:
+      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
+        frame, self.board.dictionary, parameters=self.params)
+      detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
+        cv2.aruco.refineDetectedMarkers(frame, self.board, corners, ids,
+                                        rejectedImgPoints, parameters=self.params)
+      # interpolate corners and draw corners
+      if len(detectedCorners) > 0:
+        rest, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
+          detectedCorners, detectedIds, frame, self.board)
+        #if detectedCorners is not None and 2 <= len(
+        #        detectedCorners) <= self.max_size:
+        if detectedCorners is not None and len(detectedCorners)==self.max_size:
+          self.allCorners=detectedCorners
+          self.allIds=detectedIds
+          allDetected=True
+
+      return {'corners': detectedCorners, 'ids': detectedIds,'allDetected': allDetected}
+    else:
+      return {'corners': [], 'ids': [],'allDetected': allDetected}
+
+
+def ex_calibrate(self,frame,data_count):
     # if there isn't configuration on the screen, save corners and ids
     allAligns = False  # TODO fix the logic here
     if self.config is None:

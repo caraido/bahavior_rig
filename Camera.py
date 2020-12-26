@@ -2,12 +2,13 @@ import cv2
 import PySpin
 import numpy as np
 import ffmpeg
-import utils.calibration_utils as cau
+from utils.path_operation_utils import copy_config
 from utils.calibration_utils import Calib
 import pandas as pd
 from dlclive import DLCLive, Processor
 from AcquisitionObject import AcquisitionObject
 from utils.image_draw_utils import draw_dots
+
 
 
 FRAME_TIMEOUT = 100  # time in milliseconds to wait for pyspin to retrieve the frame
@@ -56,10 +57,11 @@ class Camera(AcquisitionObject):
 
       # could move this to init if desired
       process['calibrator'] = Calib(options['mode'])
-      process['calibrator'].root_config_path= self.file
+      process['calibrator'].root_config_path= self.file # does this return the file path?
+
       #process['calibrator'].reset()
-      if options['mode'] == 'extrinsic':
-        process['calibrator'].load_ex_config(self.device_serial_number)
+      #if options['mode'] == 'extrinsic':
+        #process['calibrator'].load_ex_config(self.device_serial_number)
 
   def end_processing(self, process):
     if process['mode'] == 'DLC':
@@ -69,6 +71,7 @@ class Camera(AcquisitionObject):
     else:
       status = process['calibrator'].save_config(
           self.device_serial_number, self.width, self.height)
+
       del process['calibrator']  # could move this to close if desired
     # TODO:status should be put on the screen!
     return status
@@ -87,7 +90,7 @@ class Camera(AcquisitionObject):
       #result = self.intrinsic_calibration(data, process)
       return result, None
     elif process['mode'] == 'extrinsic':
-      result = process['calibrator'].ex_calibrate(data, process)
+      result = process['calibrator'].ex_calibrate2(data, data_count)
     #  result = self.extrinsic_calibration(data, process)
       return result, None
 
@@ -101,19 +104,6 @@ class Camera(AcquisitionObject):
         raise Exception(f"Image incomplete with image status {status} ...")
       # frame = np.reshape(im.GetData(), self.size)
       data = im.GetNDArray()  # TODO: check that this works!!
-
-      # TODO: move calibration stuff to own function running on separate process, accessing self.frame
-      # check calibration status
-      # if self._in_calibrating and self._ex_calibrating:
-      #   raise Warning('Only one type of calibration can be turned on!')
-
-      # # intrinsic calibration
-      # if self._in_calibrating and not self._ex_calibrating:
-      #   self.intrinsic_calibration(frame)
-
-      # # extrinsic calibration
-      # if self._ex_calibrating and not self._in_calibrating:
-      #   self.extrinsic_calibration(frame)
 
       im.Release()
       yield data
@@ -198,10 +188,17 @@ class Camera(AcquisitionObject):
             cv2.putText(frame, text, (50, 60),
                           cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
+            '''
             if results['allAligns']:
               text='Enough corners aligned! Ready to go'
             else:
               text="Missing ids or corners!"
+            '''
+
+            if results['allDectected']:
+              text = 'Enough corners detected! Ready to go'
+            else:
+              text = "Not enough corners! Please adjust the camera"
 
             cv2.putText(frame, text, (500, 1000),
                         cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
@@ -212,6 +209,11 @@ class Camera(AcquisitionObject):
                   cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
 
       return frame
+
+  def end_run(self):
+    if self.file:
+      copy_config(self.file)
+
 
   def close(self):
     self._spincam.DeInit()

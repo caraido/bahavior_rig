@@ -59,22 +59,22 @@
 	- [x] Zach: stop()
 		- [x] remove dlc_switch()
 		- [x] different method to turn on and off display (need to use _displaying_lock, need to make sure that we don't use 2 locks at the same time)
-	- [ ] capture()
+	- [x] capture()
 		- [x] Zach: include displaying lock
 		- [x] Zach: why is frame_count inside the is_displaying block?
-		- [ ] Alec: move calibration and dlc stuff out 
+		- [x] Alec: move calibration and dlc stuff out 
 	- [x] display()
 		- [x] needs _display lock
 		- [x] add frame annotation in predisplay()
 	- [x] Zach: __del__ may have an issue with run() race condition
-	- [ ] Alec: dlc
+	- [x] Alec: dlc
 		- [x] new thread in AcquisitionGroup, and logic to handle whether dlc is on, which camera, etc.
 		- [x] 'trace' button should call acquisitiongroup function to start dlc thread
-		- [ ] Zach: dlc thread runs a AcquisitionObject.run_processing() method which works similar to run()
+		- [x] Zach: dlc thread runs a AcquisitionObject.run_processing() method which works similar to run()
 		- [x] dlc will acquire a frame and write to self.pose
 		- [x] predisplay() will take frame, and can call idu.draw_dots on self.pose
 		- [x] move the cv2.putText into predisplay()
-	- [ ] Alec: calibration
+	- [x] Alec: calibration
 		- [x] make sure that we're preventing calibration during dlc, saving (dlc_switch, start, and calibration_switch)
 			- [x] update: calibration is prevented during dlc...
 		- [x] maybe we'll make a thread for calibration, and will have a while loop accessing self._frame_lock, copying self.frame, and feeding to intrinsic_calibration() etc. 

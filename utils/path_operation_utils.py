@@ -1,5 +1,6 @@
 import os
 import time
+import shutil
 
 saving_path_prefix = 'C:/Users/SchwartzLab'
 default_saving_path= 'Desktop'
@@ -19,7 +20,7 @@ def get_default_name():
 
 def change_default_path(input_path):
 	global default_saving_path
-	if os.path.exists(saving_path_prefix + '/' + default_saving_path):
+	if os.path.exists(os.path.join(saving_path_prefix, default_saving_path)):
 		default_saving_path = input_path
 		print('changed default saving path into: '+ input_path)
 	else:
@@ -40,20 +41,20 @@ def change_path_prefix(input_prefix):
 def reformat_filepath(path,name,camera:list):
 	date= time.strftime("%Y-%m-%d_",time.localtime())
 	if path == '':
-		real_path = saving_path_prefix+'/'+default_saving_path
+		real_path = os.path.join(saving_path_prefix,default_saving_path)
 		print("No file path specified. Will use default path")
 	else:
-		real_path = saving_path_prefix+'/'+path
+		real_path = os.path.join(saving_path_prefix,path)
 
 	if not os.path.exists(real_path):
 		os.makedirs(real_path)
 		print("file path %s doesn't exist, creating one..." % real_path)
 
 	if name =='':
-		full_path = real_path + '/' + date + default_folder_name
+		full_path = os.path.join(real_path, date + default_folder_name)
 		print("No folder name specified. Will use default folder name")
 	else:
-		full_path = real_path + '/' + date + name
+		full_path = os.path.join(real_path, date + name)
 
 	if not os.path.exists(full_path):
 		os.mkdir(full_path)
@@ -61,18 +62,27 @@ def reformat_filepath(path,name,camera:list):
 	else:
 		i=1
 		while True:
-			if os.path.exists(full_path+'('+str(i)+')'):
+			if os.path.exists(full_path+'(%s)'%i):
 				i+=1
 			else:
-				full_path=full_path+'('+str(i)+')'
+				full_path=full_path+'(%s)'%i
 				os.mkdir(full_path)
 				break
 
 	filepaths = []
 	for serial_number in camera:
-		camera_filepath = full_path+'/'+'camera_' + serial_number+'.MOV'
+		camera_filepath = os.path.join(full_path,'camera_%d.MOV'%serial_number)
 		filepaths.append(camera_filepath)
 
-	audio_filepath = full_path+'/'+'audio.tdms'
+	audio_filepath = os.path.join(full_path,'audio.tdms')
 	filepaths.append(audio_filepath)
 	return filepaths
+
+def copy_config(filepath):
+	local_config_path = os.path.join(filepath, 'config')
+	global_config_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
+	if not os.path.exists(local_config_path):
+		os.mkdir(local_config_path)
+		global_configs = os.listdir(global_config_path)
+		for item in global_configs:
+			shutil.copy(os.path.join(global_config_path, item), local_config_path)
