@@ -12,20 +12,106 @@
 # raw and processed subfolders
 
 # separated into threads? each runs through a sequence of tasks
-  # one for video
-    # run dlc models on 1 video at a time?
-    # generate plots
-    # sends to server, HDD
-  # one for audio
-    # convert to .mat / .wav etc.
-    # down the line: run deepsqueak
-    # down the line: analyze squeaks and plot?
-    # sends to server, HDD
-  # one for other stuff
-    # compile errors/config info into a file in the directory
-      # calibration
-    # sends to server, HDD
-  
-  # when all the threads are done
-    # delete SSD folder
+# one for video
+# run dlc models on 1 video at a time?
+# generate plots
+# sends to server, HDD
+# one for audio
+# convert to .mat / .wav etc.
+# down the line: run deepsqueak
+# down the line: analyze squeaks and plot?
+# sends to server, HDD
+# one for other stuff
+# compile errors/config info into a file in the directory
+# calibration
+# sends to server, HDD
 
+# when all the threads are done
+# delete SSD folder
+
+from utils.path_operation_utils import copy_config, load_config
+from utils.calibration_utils import undistort_videos,undistort_markers
+from utils.geometry_utils import find_window
+from utils.dlc_utils import dlc_analysis,dlc_plotting
+import os
+
+class ProcessingGroup:
+
+	def __init__(self):
+		self.rootpath = None
+		self.dlcpath = None
+
+
+	def __call__(self, rootpath,dlcpath):
+		self.dlcpath =dlcpath
+		self.rootpath=rootpath
+		self.processpath = os.path.join(self.rootpath, 'processed') # make it a property
+		self.config_path = os.path.join(self.rootpath,'config')
+
+	def copy_configs(self):
+		if self.rootpath:
+			copy_config(self.rootpath)
+
+	def post_process(self,calib=True,
+					 mat=True,
+					 dlc=True,
+					 dsqk=True,
+					 plotting=True,
+					 server=True,
+					 HDD=True):
+		if calib:
+			self.post_calibration()
+		if mat:
+			self.tdms2mat()
+		if dlc:
+			self.dlc_analysis()
+		if dsqk:
+			self.dsqk_analysis()
+		if plotting:
+			self.dlc_plotting()
+			self.dsqk_plotting()
+		if server:
+			self.SSD2server()
+		if HDD:
+			self.SSD2HDD()
+
+	def post_calibration(self):
+		# for each camera, there is one "extrinsic" and "intrinsic"
+
+		# undistort the videos
+		# time consumimg
+		result = undistort_videos(self.rootpath)
+		if result is not None:
+			print("saved undistorted videos!")
+
+		# undistort the markers
+		undistort_markers(self.rootpath)
+
+		# find window and arena center
+		find_window(self.rootpath)
+
+
+	def tdms2mat(self):
+		pass
+
+	def dlc_analysis(self):
+		# dlc anlysis
+		dlc_analysis(self.rootpath, self.dlcpath)
+
+	def dlc_plotting(self):
+		# dlc plotting
+		dlc_plotting(self.rootpath,self.dlcpath)
+
+	def dsqk_analysis(self):
+		pass
+
+	def dsqk_plotting(self):
+		pass
+
+	def SSD2server(self):
+		# copy and paste
+		pass
+
+	def SSD2HDD(self):
+		# copy and paste
+		pass

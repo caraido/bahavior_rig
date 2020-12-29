@@ -43,7 +43,7 @@ def find_intersect(board1_xy, board2_xy, board1_dist, board2_dist):
     intersect = np.array(intersect.args,dtype=float)
     return intersect
 
-def find_window(corners):
+def find_window(rootpath):
     pass
 
 

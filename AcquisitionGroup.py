@@ -5,6 +5,8 @@ import threading
 from Camera import Camera
 from Nidaq import Nidaq
 
+import ProcessingGroup as pg
+
 
 class AcquisitionGroup:
   def __init__(self, frame_rate=30, audio_settings=None):
@@ -20,6 +22,8 @@ class AcquisitionGroup:
     self._processors = [None] * self.nChildren
     self._runners = [None] * self.nChildren
     self.filepaths = None
+
+    self.pg = pg.ProcessingGroup(self.filepaths)
 
   def start(self, filepaths=None, isDisplayed=True):
     self.filepaths = filepaths
@@ -78,6 +82,12 @@ class AcquisitionGroup:
       child.stop()
     del self
     self._processors = [None] * self.nChildren
+
+    if self.filepaths is not None:
+      self.post_analysis = threading.Thread(
+        target = post_analysis)
+      self.post_analysis.start()
+    # ProcessGroup takeover?
 
     # TODO: should be able to remove this
     os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
