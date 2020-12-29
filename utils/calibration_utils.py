@@ -475,7 +475,7 @@ def ex_calibrate(self,frame,data_count):
           #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
     return {'corners': corners, 'ids': ids, 'allAligns': allAligns}
 
-
+# for all cameras
 def undistort_videos(rootpath):
   raw_items = os.listdir(rootpath)
   config_path = os.path.join(rootpath,'config')
@@ -519,24 +519,19 @@ def undistort_videos(rootpath):
 
   return intrinsics
 
+# only for top camera
 def undistort_markers(rootpath):
   config_path = os.path.join(rootpath, 'config')
   items = os.listdir(config_path)
   if not os.path.exists(os.path.join(rootpath,'processed')):
     os.mkdir(os.path.join(rootpath,'processed'))
 
-  '''
-  processed_path = os.path.join(rootpath,'processed')
-  if not os.path.exists(os.path.join(processed_path,'config')):
-    os.mkdir(os.path.join(processed_path,'config'))
-  processed_config_path = os.path.join(processed_path,'config')
-  '''
-
   intrinsics = [a for a in items if 'intrinsic' in a]
-  extrinsics = [a for a in items if 'extrinsic' in a]
-  if len(intrinsics)==len(extrinsics):
-    for intrinsic in intrinsics:
-      serial_number = re.findall("\d+", intrinsic)[0]
+
+  for intrinsic in intrinsics:
+    serial_number = re.findall("\d+", intrinsic)[0]
+    # find top camera
+    if serial_number == '17391304':
       with open(os.path.join(config_path,intrinsic),'r') as f:
         in_config = toml.load(f)
 
@@ -556,20 +551,3 @@ def undistort_markers(rootpath):
 
       with open(os.path.join(config_path, intrinsic), 'a') as f:
         toml.dump(new_item,f)
-
-  '''
-  images = []
-  for file in os.listdir(images_path):
-    if fnmatch.fnmatch(file, '*.png'):
-      images.append(file)
-
-  path_to_save_undistorted_images = os.path.join(images_path, 'undistorted')
-
-  if not os.path.exists(path_to_save_undistorted_images):
-    os.mkdir(path_to_save_undistorted_images)
-
-  for image in tqdm(images):
-    img = cv2.imread(os.path.join(images_path, image))
-    dst = cv2.undistort(img, mtx, dist, None, newcameramtx)
-    cv2.imwrite(os.path.join(path_to_save_undistorted_images, image), dst)
-  '''

@@ -44,7 +44,27 @@ def find_intersect(board1_xy, board2_xy, board1_dist, board2_dist):
     return intersect
 
 def find_window(rootpath):
+    config_folder_path = os.path.join(rootpath,'config')
+    items=os.listdir(config_folder_path)
+    extrinsic = [a for a in items if 'extrinsic' in a and '17391304' in a]
+    rig = [a for a in items if 'rig' in a]
+
+    if len(extrinsic) != 0 and len(rig)==1:
+        with open(os.path.join(config_folder_path,extrinsic[0]),'r') as f:
+            config = toml.load(f)
+        try:
+            new_corners = np.array(config['new_corners'])
+        except:
+            new_corners = np.array(config['corners'])
+
+        if new_corners.shape != (6,1,4,2):
+            raise Exception("can't proceed! 6")
+        with open(os.path.join(config_folder_path,rig[0]),'r') as f:
+            rig = toml.load(f)
+
+def find_board_center(corners:np.ndarray):
     pass
+
 
 
 def _triangle_area(point1,point2,point3):
