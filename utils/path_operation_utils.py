@@ -1,6 +1,7 @@
 import os
 import time
 import shutil
+import toml
 
 saving_path_prefix = 'C:/Users/SchwartzLab'
 default_saving_path= 'Desktop'
@@ -81,8 +82,26 @@ def reformat_filepath(path,name,camera:list):
 def copy_config(filepath):
 	local_config_path = os.path.join(filepath, 'config')
 	global_config_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
+
 	if not os.path.exists(local_config_path):
 		os.mkdir(local_config_path)
 		global_configs = os.listdir(global_config_path)
 		for item in global_configs:
 			shutil.copy(os.path.join(global_config_path, item), local_config_path)
+
+def load_config(filepath):
+	local_config_path = os.path.join(filepath,'config')
+	configs = os.listdir(local_config_path)
+	data = {}
+	for config in configs:
+		data[config]=toml.load(os.path.join(local_config_path,config))
+	return data
+
+
+
+
+
+
+
+
+

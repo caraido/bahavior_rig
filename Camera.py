@@ -2,7 +2,6 @@ import cv2
 import PySpin
 import numpy as np
 import ffmpeg
-from utils.path_operation_utils import copy_config
 from utils.calibration_utils import Calib
 import pandas as pd
 from dlclive import DLCLive, Processor
@@ -210,10 +209,9 @@ class Camera(AcquisitionObject):
 
       return frame
 
-  def end_run(self):
-    if self.file:
-      copy_config(self.file)
-
+#  def end_run(self):
+#    if self.file:
+#      copy_config(self.file)
 
   def close(self):
     self._spincam.DeInit()

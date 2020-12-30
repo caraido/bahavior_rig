@@ -8,6 +8,9 @@ import matplotlib.pyplot as plt
 import matplotlib as mpl
 import toml
 import pandas as pd
+import ffmpeg
+import subprocess as sp
+import re
 
 CALIB_UPDATE_EACH = 3 # frame interval for calibration update
 
@@ -471,3 +474,102 @@ def ex_calibrate(self,frame,data_count):
           #   cv2.putText(frame, text, (500, 1000),
           #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
     return {'corners': corners, 'ids': ids, 'allAligns': allAligns}
+
+
+def undistort_videos(rootpath):
+  raw_items = os.listdir(rootpath)
+  config_path = os.path.join(rootpath,'config')
+  items = os.listdir(config_path)
+  if not os.path.exists(os.path.join(rootpath,'processed')):
+    os.mkdir(os.path.join(rootpath,'processed'))
+  processed_path = os.path.join(rootpath,'processed')
+
+  intrinsics = None
+  for item in items:
+    if 'intrinsic' in item:
+      serial_number = re.findall("\d+",item)[0]
+      with open(os.path.join(config_path,item),'r') as f:
+        intrinsics = toml.load(f)
+      width = intrinsics['width']
+      height = intrinsics['height']
+      mtx = np.array(intrinsics['camera_mat'])
+      dist = np.array(intrinsics['dist_coeff'])
+      resolution = (width, height)
+      newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, resolution, 1, resolution)
+
+      movie = [a for a in raw_items if serial_number in a and '.MOV' in a]
+      movie_path = os.path.join(rootpath,movie[0])
+
+      video_writer = ffmpeg \
+        .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{width}x{height}', framerate=30) \
+        .output(os.path.join(processed_path,'undistorted_'+movie[0]), vcodec='libx265') \
+        .overwrite_output() \
+        .run_async(pipe_stdin=True)
+
+      cap = cv2.VideoCapture(movie_path)
+      ret =True
+      while ret:
+        ret,frame=cap.read()
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        dst = cv2.undistort(gray, mtx, dist, None, newcameramtx)
+        video_writer.stdin.write(data=dst.tobytes())
+      video_writer.stdin.close()
+      video_writer.wait()
+      del video_writer
+
+  return intrinsics
+
+def undistort_markers(rootpath):
+  config_path = os.path.join(rootpath, 'config')
+  items = os.listdir(config_path)
+  if not os.path.exists(os.path.join(rootpath,'processed')):
+    os.mkdir(os.path.join(rootpath,'processed'))
+
+  '''
+  processed_path = os.path.join(rootpath,'processed')
+  if not os.path.exists(os.path.join(processed_path,'config')):
+    os.mkdir(os.path.join(processed_path,'config'))
+  processed_config_path = os.path.join(processed_path,'config')
+  '''
+
+  intrinsics = [a for a in items if 'intrinsic' in a]
+  extrinsics = [a for a in items if 'extrinsic' in a]
+  if len(intrinsics)==len(extrinsics):
+    for intrinsic in intrinsics:
+      serial_number = re.findall("\d+", intrinsic)[0]
+      with open(os.path.join(config_path,intrinsic),'r') as f:
+        in_config = toml.load(f)
+
+      mtx = np.array(in_config['camera_mat'])
+      dist = np.array(in_config['dist_coeff'])
+
+      with open(os.path.join(config_path,'config_extrinsic_%s.toml)'%serial_number),'r') as f:
+        ex_config = toml.load(f)
+      corners=np.array(ex_config['corners'])
+      shape = corners.shape
+      new_corners=[]
+      for i in range(shape[0]):
+        new_corner = cv2.undistortPoints(corners[i],mtx,dist,P=mtx)
+        new_corners.append(new_corner)
+      undistort_corners=np.array(new_corners).tolist()
+      new_item = {'undistorted_corners': undistort_corners}
+
+      with open(os.path.join(config_path, intrinsic), 'a') as f:
+        toml.dump(new_item,f)
+
+  '''
+  images = []
+  for file in os.listdir(images_path):
+    if fnmatch.fnmatch(file, '*.png'):
+      images.append(file)
+
+  path_to_save_undistorted_images = os.path.join(images_path, 'undistorted')
+
+  if not os.path.exists(path_to_save_undistorted_images):
+    os.mkdir(path_to_save_undistorted_images)
+
+  for image in tqdm(images):
+    img = cv2.imread(os.path.join(images_path, image))
+    dst = cv2.undistort(img, mtx, dist, None, newcameramtx)
+    cv2.imwrite(os.path.join(path_to_save_undistorted_images, image), dst)
+  '''
