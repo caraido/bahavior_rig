@@ -7,7 +7,7 @@ def norm_vector(vector):
   '''
   return np.divide(vector, np.sqrt(np.sum(vector**2, axis=1)[:, np.newaxis]))
 
-def cutoff(pose,cuttof=0.9):
+def cutoff(pose,cutoff=0.9):
     pass
 
 def angle_2pi(va):

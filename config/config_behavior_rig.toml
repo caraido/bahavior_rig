@@ -6,7 +6,7 @@ board_size = 0.787
 # need to be remeasured if charuco boards are moved
 board_A2A=[1.377,4.843]
 board_A2B=[13.0,14.2]
-board_A2C=[12.165,9.685]
+board_A2C=[12.465,9.685]
 
 board_B2A = [14.5,13.0]
 board_B2B = [4.921,1.457]

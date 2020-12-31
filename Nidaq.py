@@ -1,10 +1,8 @@
-import cv2
 import numpy as np
 from scipy import signal, interpolate
 import matplotlib as mpl
 import nidaqmx
 from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
-from audio_processing import read_audio
 from AcquisitionObject import AcquisitionObject
 
 AUDIO_INPUT_CHANNEL = 'Dev1/ai1'

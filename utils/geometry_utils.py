@@ -4,14 +4,14 @@ import cv2
 import toml
 import os
 import pandas as pd
-from sympy import Circle,Point
+from sympy import Circle,Point,sympify
 from utils.head_angle_analysis import project_from_head_to_walls,is_in_window
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 
-import pickle as pk
 from scipy import io as sio
+from itertools import combinations
 
 
 def get_board_side_length_pixel(corners):
@@ -34,7 +34,7 @@ def get_r_pixel(r, corner_pixel, board):
     return resize
 
 
-def find_intersect(board1_xy, board2_xy, board1_dist, board2_dist):
+def find_intersect_ray_circle(board1_xy, board2_xy, board1_dist, board2_dist):
     board1_xy = Point(board1_xy[0],board1_xy[1])
     board2_xy = Point(board2_xy[0], board2_xy[1])
     circle1 = Circle(board1_xy,board1_dist)
@@ -42,6 +42,59 @@ def find_intersect(board1_xy, board2_xy, board1_dist, board2_dist):
     intersect = circle1.intersect(circle2)
     intersect = np.array(intersect.args,dtype=float)
     return intersect
+
+
+def find_intersect_circle_circle(circle_center1,r_1,circle_center2,r_2):
+    point1 = Point(circle_center1)
+    point2 = Point(circle_center2)
+    circle1 = Circle(point1,sympify(str(r_1),rational=True))
+    circle2 = Circle(point2,sympify(str(r_2),rational=True))
+    intersect = circle2.intersect(circle1)
+    intersect = np.array([intersect.args[0],intersect.args[1]],dtype=float)
+    return intersect
+
+
+def rank_distance(points:np.ndarray):
+    distance=[]
+    point=[]
+    for i in range(len(points)):
+        for j in range(len(points)-i-1):
+            distance.append(np.sqrt(np.square(points[i][0]-points[i+j+1][0])+np.square(points[i][0]-points[i+j+1][0])))
+            point.append((i,i+j+1))
+    sort = np.array([a for _,a in sorted(zip(distance,point))])
+    top4 = sort[0:4].reshape(-1)
+    rank = np.bincount(top4)
+    indices = [index for index,a in enumerate(rank) if a==2 or a==3]
+    if len(indices) != 3:
+        raise Exception("wrong distance")
+    else:
+        return points[indices]
+
+
+def get_mean_circle_center(points:list):
+    points = list(combinations(points,3))
+    all_centers=[]
+    for item in points:
+        all_centers.append(get_circle_center(item[0],item[1],item[2]))
+    mean_center=np.mean(all_centers,axis=0)
+
+    return mean_center
+
+
+def get_circle_center(p1, p2, p3):
+    x21 = p2[0] - p1[0]
+    y21 = p2[1] - p1[1]
+    x32 = p3[0] - p2[0]
+    y32 = p3[1] - p2[1]
+    # three colinear
+    if (x21 * y32 - x32 * y21 == 0):
+        return None
+    xy21 = p2[0] * p2[0] - p1[0] * p1[0] + p2[1] * p2[1] - p1[1] * p1[1]
+    xy32 = p3[0] * p3[0] - p2[0] * p2[0] + p3[1] * p3[1] - p2[1] * p2[1]
+    y0 = (x32 * xy21 - x21 * xy32) / (2 * (y21 * x32 - y32 * x21))
+    x0 = (xy21 - 2 * y0 * y21) / (2.0 * x21)
+    return x0, y0
+
 
 def find_window(rootpath):
     config_folder_path = os.path.join(rootpath,'config')
@@ -56,15 +109,89 @@ def find_window(rootpath):
             new_corners = np.array(config['new_corners'])
         except:
             new_corners = np.array(config['corners'])
+        ids=config['ids']
+        ids = [int(i[0]) for i in ids]
+        new_corners = np.array([corner for _,corner in sorted(zip(ids,new_corners))])
 
         if new_corners.shape != (6,1,4,2):
-            raise Exception("can't proceed! 6")
+            raise Exception("can't proceed! missing corners")
         with open(os.path.join(config_folder_path,rig[0]),'r') as f:
             rig = toml.load(f)
+        results = find_board_center_and_windows(new_corners,rig)
+        with open(os.path.join(config_folder_path, extrinsic[0]), 'a') as f:
+            toml.dump(results,f,encoder=toml.TomlNumpyEncoder())
 
-def find_board_center(corners:np.ndarray):
-    pass
 
+def find_board_center_and_windows(corners:np.ndarray,rig:dict):
+    boardA = corners[[0,3],0]
+    boardB = corners[[1,4],0]
+    boardC = corners[[2,5],0]
+    boardA_center = np.array([np.mean(boardA[:,:,0]),np.mean(boardA[:,:,1])])
+    boardB_center = np.array([np.mean(boardB[:, :, 0]), np.mean(boardB[:, :, 1])])
+    boardC_center = np.array([np.mean(boardC[:, :, 0]), np.mean(boardC[:, :, 1])])
+    board_length = get_board_side_length_pixel(corners)
+
+    A2A = [get_r_pixel(rig['board_A2A'][0],board_length,rig['board_size']),get_r_pixel(rig['board_A2A'][1],board_length,rig['board_size'])]
+    A2B = [get_r_pixel(rig['board_A2B'][0], board_length, rig['board_size']),get_r_pixel(rig['board_A2B'][1],board_length,rig['board_size'])]
+    A2C = [get_r_pixel(rig['board_A2C'][0], board_length, rig['board_size']),get_r_pixel(rig['board_A2C'][1],board_length,rig['board_size'])]
+
+    B2A = [get_r_pixel(rig['board_B2A'][0], board_length, rig['board_size']),get_r_pixel(rig['board_B2A'][1],board_length,rig['board_size'])]
+    B2B = [get_r_pixel(rig['board_B2B'][0], board_length, rig['board_size']),get_r_pixel(rig['board_B2B'][1],board_length,rig['board_size'])]
+    B2C = [get_r_pixel(rig['board_B2C'][0], board_length, rig['board_size']),get_r_pixel(rig['board_B2C'][1],board_length,rig['board_size'])]
+
+    C2A = [get_r_pixel(rig['board_C2A'][0], board_length, rig['board_size']),get_r_pixel(rig['board_C2A'][1],board_length,rig['board_size'])]
+    C2B = [get_r_pixel(rig['board_C2B'][0], board_length, rig['board_size']),get_r_pixel(rig['board_C2B'][1],board_length,rig['board_size'])]
+    C2C = [get_r_pixel(rig['board_C2C'][0], board_length, rig['board_size']),get_r_pixel(rig['board_C2C'][1],board_length,rig['board_size'])]
+
+
+    winA1 = np.array([find_intersect_circle_circle(boardA_center,A2A[0],boardB_center,B2A[0]), \
+                      find_intersect_circle_circle(boardA_center, A2A[0], boardC_center, C2A[0]), \
+                      find_intersect_circle_circle(boardC_center, C2A[0], boardB_center, B2A[0])]).reshape([6,2])
+    winA2 = np.array([find_intersect_circle_circle(boardA_center,A2A[1],boardB_center,B2A[1]), \
+                      find_intersect_circle_circle(boardA_center, A2A[1], boardC_center, C2A[1]), \
+                      find_intersect_circle_circle(boardC_center, C2A[1], boardB_center, B2A[1])]).reshape([6,2])
+
+    winB1 = np.array([find_intersect_circle_circle(boardA_center, A2B[0], boardB_center, B2B[0]), \
+                      find_intersect_circle_circle(boardA_center, A2B[0], boardC_center, C2B[0]), \
+                      find_intersect_circle_circle(boardC_center, C2B[0], boardB_center, B2B[0])]).reshape([6,2])
+    winB2 = np.array([find_intersect_circle_circle(boardA_center, A2B[1], boardB_center, B2B[1]), \
+                      find_intersect_circle_circle(boardA_center, A2B[1], boardC_center, C2B[1]), \
+                      find_intersect_circle_circle(boardC_center, C2B[1], boardB_center, B2B[1])]).reshape([6,2])
+
+    winC1 = np.array([find_intersect_circle_circle(boardA_center, A2C[0], boardB_center, B2C[0]), \
+                      find_intersect_circle_circle(boardA_center, A2C[0], boardC_center, C2C[0]), \
+                      find_intersect_circle_circle(boardC_center, C2C[0], boardB_center, B2C[0])]).reshape([6,2])
+    winC2 = np.array([find_intersect_circle_circle(boardA_center, A2C[1], boardB_center, B2C[1]), \
+                      find_intersect_circle_circle(boardA_center, A2C[1], boardC_center, C2C[1]), \
+                      find_intersect_circle_circle(boardC_center, C2C[1], boardB_center, B2C[1])]).reshape([6,2])
+
+    A1 = np.mean(rank_distance(winA1),axis=0)
+    A2 = np.mean(rank_distance(winA2),axis=0)
+
+    B1 = np.mean(rank_distance(winB1),axis=0)
+    B2 = np.mean(rank_distance(winB2),axis=0)
+
+    C1 = np.mean(rank_distance(winC1),axis=0)
+    C2 = np.mean(rank_distance(winC2),axis=0)
+
+    circle_center = get_mean_circle_center([A1,A2,B1,B2,C1,C2])
+    circle_center.dtype=int
+    A1.dtype=int
+    A2.dtype=int
+    B1.dtype=int
+    B2.dtype=int
+    C1.dtype=int
+    C2.dtype=int
+
+    results = {'recorded_center': circle_center,
+                 'A1':A1,
+                 'A2': A2,
+                 'B1': B1,
+                 'B2': B2,
+                 'C1': C1,
+                 'C2': C2,
+                    }
+    return results
 
 
 def _triangle_area(point1,point2,point3):
@@ -193,18 +320,14 @@ class Config:
 
 
 class Gaze_angle:
-    def __init__(self,main_config, config_folder_path,gazePoint=0.5725):
-        main_config = Config(main_config)
-        #self.circle_center = config.circle_center
+    def __init__(self,config_folder_path, gazePoint=0.5725):
+        main_config = Config(config_folder_path)
         self.corners = main_config.config_top_cam['corners']
         self.inner_r = main_config.config_rig['inner_r']
         self.outer_r = main_config.config_rig['outer_r_']
         self.board_size = main_config.config_rig['board_size']
 
-        #self.windowA = config.window_A
-        #self.windowB = config.window_B
-        #self.windowC = config.window_C
-        local_config = toml.load(config_folder_path)
+        local_config = main_config.config_top_cam
         self.windowA = np.array([local_config['A1'],local_config['A2']])
         self.windowB = np.array([local_config['B1'], local_config['B2']])
         self.windowC = np.array([local_config['C1'], local_config['C2']])
@@ -224,15 +347,27 @@ class Gaze_angle:
 
        # self.engine = matlab.engine.start_matlab()
 
-    def __call__(self,root_path, save=True):
+    def __call__(self,root_path, cutoff=0.9, save=True):
         # get the pose estimation path
         # coord_path = 'C:\\Users\\SchwartzLab\\Downloads\\Acclimation_videos_1\\'
         self.title_name = os.path.split(root_path)[-1]
         all_file = os.listdir(root_path)
         name = [a for a in all_file if 'second' in a and 'csv' in a]
         coord = os.path.join(root_path,name[0])
-        pose = pd.read_csv(coord,header=[1,2])
+        pose = pd.read_csv(coord, header=[1,2])
 
+        # cutoff (doesn't know if it works
+        pose['leftear']['x'] = pose.apply(lambda x: np.nan if x['leftear']['likelihood']<cutoff else x['leftear']['x'], axis=1)
+        pose['leftear']['y'] = pose.apply(lambda x: np.nan if x['leftear']['likelihood'] <cutoff else x['leftear']['y'], axis=1)
+
+        pose['rightear']['x'] = pose.apply(lambda x: np.nan if x['rightear']['likelihood'] < cutoff else x['rightear']['x'], axis=1)
+        pose['rightear']['y'] = pose.apply(lambda x: np.nan if x['rightear']['likelihood'] < cutoff else x['rightear']['y'], axis=1)
+
+        pose['snout']['x'] = pose.apply(lambda x: np.nan if x['snout']['likelihood'] < cutoff else x['snout']['x'], axis=1)
+        pose['snout']['y'] = pose.apply(lambda x: np.nan if x['snout']['likelihood'] < cutoff else x['snout']['y'], axis=1)
+
+        pose['tailbase']['x'] = pose.apply(lambda x: np.nan if x['tailbase']['likelihood'] < cutoff else x['tailbase']['x'], axis=1)
+        pose['tailbase']['y'] = pose.apply(lambda x: np.nan if x['tailbase']['likelihood'] < cutoff else x['tailbase']['y'], axis=1)
 
         # gaze
         inner_left,outer_left, inner_right, outer_right = project_from_head_to_walls(pose,
@@ -247,6 +382,15 @@ class Gaze_angle:
         body = body_center(pose)
         recenter_body = body-self.circle_center[:,np.newaxis]
         arc_body = np.arctan2(recenter_body[1],recenter_body[0])[:,np.newaxis]
+
+        # check if the body center is in experiment area
+        distance = np.linalg.norm(recenter_body,axis=0)
+        for i,dis in enumerate(distance):
+            if dis<self.inner_r_pixel or dis>self.outer_r_pixel:
+                inner_left[i]=np.nan
+                outer_left[i]=np.nan
+                inner_right[i]=np.nan
+                outer_right[i]=np.nan
 
         # in window
         A_right = np.sum(is_in_window(outer_right,self.windowA,self.circle_center))
@@ -273,9 +417,21 @@ class Gaze_angle:
         B_weight_body = B_body / (A_body + B_body + C_body)
         C_weight_body = C_body / (A_body + B_body + C_body)
 
-        winPreference_right = ((A_right + B_right + C_right) / len(pd.isna(outer_right))) * 360 / 99
-        winPreference_left = ((A_left + B_left + C_left) / len(pd.isna(outer_left))) * 360 / 99
-        winPreference_body = ((A_body + B_body + C_body) / len(pd.isna(arc_body))) * 360 / 99
+        window_A_center = np.array(self.windowA) - np.array(self.circle_center)
+        window_B_center = np.array(self.windowB) - np.array(self.circle_center)
+        window_C_center = np.array(self.windowC) - np.array(self.circle_center)
+
+        window_A_angle = np.arctan2(window_A_center[:, 1], window_A_center[:, 0])
+        window_B_angle = np.arctan2(window_B_center[:, 1], window_B_center[:, 0])
+        window_C_angle = np.arctan2(window_C_center[:, 1], window_C_center[:, 0])
+
+        windows_arc= np.abs(window_A_angle[0]-window_A_angle[1])+\
+                     np.abs(window_B_angle[0]-window_B_angle[1])+\
+                     np.abs(window_C_angle[0]-window_C_angle[1])
+
+        winPreference_right = ((A_right + B_right + C_right) / len(pd.isna(outer_right))) * 2*np.pi/windows_arc
+        winPreference_left = ((A_left + B_left + C_left) / len(pd.isna(outer_left))) * 2*np.pi/windows_arc
+        winPreference_body = ((A_body + B_body + C_body) / len(pd.isna(arc_body))) * 2*np.pi/windows_arc
 
         table = np.array([A_weight_right,B_weight_right,C_weight_right,winPreference_right,
                           A_weight_left,B_weight_left,C_weight_left,winPreference_left,
@@ -337,9 +493,9 @@ class Gaze_angle:
         if not os.path.exists(path):
             os.mkdir(path)
         if isinstance(data,pd.DataFrame):
-            data.to_csv(os.path.join(path,'all_gaze_angle_%d.csv'%int(self.gazePoint*180/np.pi)))
+            data.to_csv(os.path.join(path,'gaze_angle_%d.csv'%int(self.gazePoint*180/np.pi)))
         else:
-            filename = os.path.join(path,'all_gaze_angle_%d.mat'%int(self.gazePoint*180/np.pi))
+            filename = os.path.join(path,'gaze_angle_%d.mat'%int(self.gazePoint*180/np.pi))
             matname = 'gaze_angle_%d.mat'%int(self.gazePoint*180/np.pi)
             sio.savemat(filename,{matname:data})
 
@@ -399,8 +555,8 @@ if __name__ == '__main__':
         video_path = path + '\\' + folder + '\\camera_17391304.MOV'
         ob.set_img(video_path)
         ob.get_loc_pixel()
-
     '''
+
     videopaths =  'C:\\Users\\SchwartzLab\\PycharmProjects\\bahavior_rig\\multimedia\\videos'
     config_folder_path = 'C:\\Users\\SchwartzLab\\PycharmProjects\\bahavior_rig\\config'
 
@@ -412,7 +568,7 @@ if __name__ == '__main__':
             gaze_model = Gaze_angle(main_config=config_folder_path,config_folder_path=config_folder_path2,gazePoint=0)
             result = gaze_model(os.path.join(videopaths,video),save=True)
             gaze_model.plot(result,savepath=os.path.join(videopaths,video),show=False)
-            #Gaze_model.plot(result,flag='mono', savepath=videopaths + '\\' + video)
+            #Gaze_model.plot(result,flag='mono', savepath=videopaths + '\\' + video)           
 
 
 

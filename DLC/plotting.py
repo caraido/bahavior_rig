@@ -1,5 +1,5 @@
 import pandas as pd
-from utils.geometry_utils import Config,get_r_pixel,get_board_side_length_pixel,find_interection
+from utils.geometry_utils import Config,get_r_pixel,get_board_side_length_pixel
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
 import os

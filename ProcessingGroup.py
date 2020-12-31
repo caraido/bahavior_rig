@@ -32,8 +32,12 @@
 from utils.path_operation_utils import copy_config, load_config
 from utils.calibration_utils import undistort_videos,undistort_markers
 from utils.geometry_utils import find_window
-from utils.dlc_utils import dlc_analysis,dlc_plotting
+from utils.dlc_utils import dlc_analysis
 import os
+from nptdms import TdmsFile
+from main import audio_settings
+import scipy.io as sio
+
 
 class ProcessingGroup:
 
@@ -56,7 +60,6 @@ class ProcessingGroup:
 					 mat=True,
 					 dlc=True,
 					 dsqk=True,
-					 plotting=True,
 					 server=True,
 					 HDD=True):
 		if calib:
@@ -67,9 +70,6 @@ class ProcessingGroup:
 			self.dlc_analysis()
 		if dsqk:
 			self.dsqk_analysis()
-		if plotting:
-			self.dlc_plotting()
-			self.dsqk_plotting()
 		if server:
 			self.SSD2server()
 		if HDD:
@@ -90,22 +90,24 @@ class ProcessingGroup:
 		# find window and arena center
 		find_window(self.rootpath)
 
-
 	def tdms2mat(self):
-		pass
+		dir_list = os.listdir(self.rootpath)
+		item_list = [self.rootpath + item for item in dir_list if '.tdms' in item and '.tdms_index' not in item]
+		f = item_list[0]
+
+		with TdmsFile.open(f) as file:
+			group = file.groups()[0]
+		channel = group.channels()[0]
+		data = channel[:]
+		audio_name = os.path.split(self.rootpath)[1]
+		audio = {audio_name:data,'fs':audio_settings['fs']}
+		sio.savemat(os.path.join(self.rootpath,'audio.mat'),audio)
 
 	def dlc_analysis(self):
-		# dlc anlysis
+		# dlc anlysis on TOP CAMERA only
 		dlc_analysis(self.rootpath, self.dlcpath)
 
-	def dlc_plotting(self):
-		# dlc plotting
-		dlc_plotting(self.rootpath,self.dlcpath)
-
 	def dsqk_analysis(self):
-		pass
-
-	def dsqk_plotting(self):
 		pass
 
 	def SSD2server(self):
