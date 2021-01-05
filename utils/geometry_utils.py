@@ -96,7 +96,7 @@ def get_circle_center(p1, p2, p3):
     return x0, y0
 
 
-def find_window(rootpath):
+def find_window_center(rootpath):
     config_folder_path = os.path.join(rootpath,'config')
     items=os.listdir(config_folder_path)
     extrinsic = [a for a in items if 'extrinsic' in a and '17391304' in a]
@@ -320,14 +320,18 @@ class Config:
 
 
 class Gaze_angle:
-    def __init__(self,config_folder_path, gazePoint=0.5725):
-        main_config = Config(config_folder_path)
+    def __init__(self, config_folder_path, gazePoint=0.5725, main_config_path=None):
+        if main_config_path:
+            main_config = Config(main_config_path)
+            local_config = toml.load(config_folder_path)
+        else:
+            main_config = Config(config_folder_path)
+            local_config = main_config.config_top_cam
         self.corners = main_config.config_top_cam['corners']
         self.inner_r = main_config.config_rig['inner_r']
         self.outer_r = main_config.config_rig['outer_r_']
         self.board_size = main_config.config_rig['board_size']
 
-        local_config = main_config.config_top_cam
         self.windowA = np.array([local_config['A1'],local_config['A2']])
         self.windowB = np.array([local_config['B1'], local_config['B2']])
         self.windowC = np.array([local_config['C1'], local_config['C2']])
@@ -345,8 +349,6 @@ class Gaze_angle:
         self.title_name=None
         self.gazePoint=gazePoint
 
-       # self.engine = matlab.engine.start_matlab()
-
     def __call__(self,root_path, cutoff=0.9, save=True):
         # get the pose estimation path
         # coord_path = 'C:\\Users\\SchwartzLab\\Downloads\\Acclimation_videos_1\\'
@@ -356,18 +358,13 @@ class Gaze_angle:
         coord = os.path.join(root_path,name[0])
         pose = pd.read_csv(coord, header=[1,2])
 
+        new_pose = pd.DataFrame()
+
         # cutoff (doesn't know if it works
-        pose['leftear']['x'] = pose.apply(lambda x: np.nan if x['leftear']['likelihood']<cutoff else x['leftear']['x'], axis=1)
-        pose['leftear']['y'] = pose.apply(lambda x: np.nan if x['leftear']['likelihood'] <cutoff else x['leftear']['y'], axis=1)
-
-        pose['rightear']['x'] = pose.apply(lambda x: np.nan if x['rightear']['likelihood'] < cutoff else x['rightear']['x'], axis=1)
-        pose['rightear']['y'] = pose.apply(lambda x: np.nan if x['rightear']['likelihood'] < cutoff else x['rightear']['y'], axis=1)
-
-        pose['snout']['x'] = pose.apply(lambda x: np.nan if x['snout']['likelihood'] < cutoff else x['snout']['x'], axis=1)
-        pose['snout']['y'] = pose.apply(lambda x: np.nan if x['snout']['likelihood'] < cutoff else x['snout']['y'], axis=1)
-
-        pose['tailbase']['x'] = pose.apply(lambda x: np.nan if x['tailbase']['likelihood'] < cutoff else x['tailbase']['x'], axis=1)
-        pose['tailbase']['y'] = pose.apply(lambda x: np.nan if x['tailbase']['likelihood'] < cutoff else x['tailbase']['y'], axis=1)
+        pose.loc[pose.leftear.likelihood < cutoff, [('leftear', 'x'), ('leftear', 'y')]] = np.nan
+        pose.loc[pose.rightear.likelihood < cutoff, [('rightear', 'x'), ('rightear', 'y')]] = np.nan
+        pose.loc[pose.snout.likelihood < cutoff, [('snout', 'x'), ('snout', 'y')]] = np.nan
+        pose.loc[pose.tailbase.likelihood < cutoff, [('tailbase', 'x'), ('tailbase', 'y')]] = np.nan
 
         # gaze
         inner_left,outer_left, inner_right, outer_right = project_from_head_to_walls(pose,
@@ -391,6 +388,7 @@ class Gaze_angle:
                 outer_left[i]=np.nan
                 inner_right[i]=np.nan
                 outer_right[i]=np.nan
+                arc_body[i]=np.nan
 
         # in window
         A_right = np.sum(is_in_window(outer_right,self.windowA,self.circle_center))
@@ -429,9 +427,9 @@ class Gaze_angle:
                      np.abs(window_B_angle[0]-window_B_angle[1])+\
                      np.abs(window_C_angle[0]-window_C_angle[1])
 
-        winPreference_right = ((A_right + B_right + C_right) / len(pd.isna(outer_right))) * 2*np.pi/windows_arc
-        winPreference_left = ((A_left + B_left + C_left) / len(pd.isna(outer_left))) * 2*np.pi/windows_arc
-        winPreference_body = ((A_body + B_body + C_body) / len(pd.isna(arc_body))) * 2*np.pi/windows_arc
+        winPreference_right = ((A_right + B_right + C_right) / np.sum(pd.notna(outer_right))) * 2*np.pi/windows_arc
+        winPreference_left = ((A_left + B_left + C_left) / np.sum(pd.notna(outer_left))) * 2*np.pi/windows_arc
+        winPreference_body = ((A_body + B_body + C_body) / np.sum(pd.notna(arc_body))) * 2*np.pi/windows_arc
 
         table = np.array([A_weight_right,B_weight_right,C_weight_right,winPreference_right,
                           A_weight_left,B_weight_left,C_weight_left,winPreference_left,
@@ -442,13 +440,13 @@ class Gaze_angle:
         stats=pd.DataFrame(table,columns=column,index=index)
         stats=stats.to_dict()
 
-        result = {'inner_left': inner_left,
-                  'inner_right': inner_right,
-                  'outer_left': outer_left,
-                  'outer_right': outer_right,
-                  'head_triangle_area':head_triangle_area,
-                  'body_triangle_area':body_triangle_area,
-                  'body_position':arc_body,
+        result = {'inner_left': np.transpose(inner_left)[0],
+                  'inner_right': np.transpose(inner_right)[0],
+                  'outer_left': np.transpose(outer_left)[0],
+                  'outer_right': np.transpose(outer_right)[0],
+                  'head_triangle_area':np.transpose(head_triangle_area),
+                  'body_triangle_area':np.transpose(body_triangle_area),
+                  'body_position':np.transpose(arc_body)[0],
                   'stats':stats
                   }
 
@@ -497,7 +495,7 @@ class Gaze_angle:
         else:
             filename = os.path.join(path,'gaze_angle_%d.mat'%int(self.gazePoint*180/np.pi))
             matname = 'gaze_angle_%d.mat'%int(self.gazePoint*180/np.pi)
-            sio.savemat(filename,{matname:data})
+            sio.savemat(filename,data)
 
     def plot(self,things:dict,savepath=None,show=False):
 
@@ -519,7 +517,7 @@ class Gaze_angle:
             labels = ["window A", "window B", "window C"]
             plt.legend(handles, labels)
             plt.title("Gaze point density of %s " % list(keys)[i])
-            plt.hist(x=self.double(things[list(keys)[i]]), bins=60, density=False)
+            plt.hist(x=self.double(np.array(things[list(keys)[i]])), bins=60, density=False)
         plt.suptitle(self.title_name +' gaze angle %d'%float(self.gazePoint*180/np.pi),fontsize=30)
 
         plt.subplot(4,1,4)
@@ -565,17 +563,7 @@ if __name__ == '__main__':
     for video in videos:
         if not video.startswith('.'):
             config_folder_path2 = os.path.join(videopaths, video ,'config_behavior_rig.toml')
-            gaze_model = Gaze_angle(main_config=config_folder_path,config_folder_path=config_folder_path2,gazePoint=0)
+            gaze_model = Gaze_angle(main_config_path=config_folder_path,config_folder_path=config_folder_path2,gazePoint=0)
             result = gaze_model(os.path.join(videopaths,video),save=True)
             gaze_model.plot(result,savepath=os.path.join(videopaths,video),show=False)
             #Gaze_model.plot(result,flag='mono', savepath=videopaths + '\\' + video)           
-
-
-
-
-
-
-
-
-
-

@@ -31,7 +31,7 @@
 
 from utils.path_operation_utils import copy_config, load_config
 from utils.calibration_utils import undistort_videos,undistort_markers
-from utils.geometry_utils import find_window
+from utils.geometry_utils import find_window_center
 from utils.dlc_utils import dlc_analysis
 import os
 from nptdms import TdmsFile
@@ -88,7 +88,7 @@ class ProcessingGroup:
 		undistort_markers(self.rootpath)
 
 		# find window and arena center
-		find_window(self.rootpath)
+		find_window_center(self.rootpath)
 
 	def tdms2mat(self):
 		dir_list = os.listdir(self.rootpath)
