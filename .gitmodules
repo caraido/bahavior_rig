@@ -1,3 +1,4 @@
 [submodule "behavior_gui"]
 	path = behavior_gui
 	url = https://github.com/zfj1/behavior_gui
+	branch = HEAD
