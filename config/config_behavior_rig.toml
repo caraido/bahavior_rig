@@ -18,10 +18,10 @@ board_C2C = [1.378,4.724]
 
 unit = 'inch'
 
-#recorded_center = [562,437] # manually added
-#window_A= [[454,801],[667,807]]# manually added
-#window_B= [[934,352], [832,169]]# manually added
-#window_C= [[308,159], [195,340]]# manually added
+recorded_center = [562,437] # manually added
+window_A= [[454,801],[667,807]]# manually added
+window_B= [[934,352], [832,169]]# manually added
+window_C= [[308,159], [195,340]]# manually added
 
 
 
