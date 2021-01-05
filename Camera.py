@@ -207,7 +207,7 @@ class Camera(AcquisitionObject):
       cv2.putText(frame, text, (700, 50),
                   cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
 
-      return frame
+    return frame
 
 #  def end_run(self):
 #    if self.file:
