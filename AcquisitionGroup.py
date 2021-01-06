@@ -7,7 +7,7 @@ from Nidaq import Nidaq
 
 import ProcessingGroup as pg
 
-
+model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second_try-Devon-2020-12-07\exported-models\DLC_Alec_second_try_resnet_50_iteration-0_shuffle-1'
 class AcquisitionGroup:
   def __init__(self, frame_rate=30, audio_settings=None):
     self._system = PySpin.System.GetInstance()
@@ -23,7 +23,7 @@ class AcquisitionGroup:
     self._runners = [None] * self.nChildren
     self.filepaths = None
 
-    self.pg = pg.ProcessingGroup(self.filepaths)
+    self.pg = pg.ProcessingGroup()
 
   def start(self, filepaths=None, isDisplayed=True):
     self.filepaths = filepaths
@@ -84,8 +84,10 @@ class AcquisitionGroup:
     self._processors = [None] * self.nChildren
 
     if self.filepaths is not None:
+      rootpath = os.path.split(self.filepaths[0])[:-2]
+      self.pg(rootpath,model_path)
       self.post_analysis = threading.Thread(
-        target = post_analysis)
+        target = self.pg.post_process)
       self.post_analysis.start()
     # ProcessGroup takeover?
 
