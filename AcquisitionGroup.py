@@ -90,7 +90,8 @@ class AcquisitionGroup:
         target = self.pg.post_process)
       try:
         self.post_analysis.start()
-      except Warning("Post analysis failed. Have to do it manually.")
+      except:
+        Warning("Post analysis failed. Have to do it manually.")
     # ProcessGroup takeover?
 
     # TODO: should be able to remove this
