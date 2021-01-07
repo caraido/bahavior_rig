@@ -40,20 +40,20 @@ def change_path_prefix(input_prefix):
 def reformat_filepath(path,name,camera:list):
 	date= time.strftime("%Y-%m-%d_",time.localtime())
 	if path == '':
-		real_path = saving_path_prefix+'/'+default_saving_path
+		real_path = os.path.join(saving_path_prefix,default_saving_path)
 		print("No file path specified. Will use default path")
 	else:
-		real_path = saving_path_prefix+'/'+path
+		real_path = os.path.join(saving_path_prefix,path)
 
 	if not os.path.exists(real_path):
 		os.makedirs(real_path)
 		print("file path %s doesn't exist, creating one..." % real_path)
 
 	if name =='':
-		full_path = real_path + '/' + date + default_folder_name
+		full_path = os.path.join(real_path, date + default_folder_name)
 		print("No folder name specified. Will use default folder name")
 	else:
-		full_path = real_path + '/' + date + name
+		full_path = os.path.join(real_path, date + name)
 
 	if not os.path.exists(full_path):
 		os.mkdir(full_path)
@@ -70,9 +70,9 @@ def reformat_filepath(path,name,camera:list):
 
 	filepaths = []
 	for serial_number in camera:
-		camera_filepath = full_path+'/'+'camera_' + serial_number+'.MOV'
+		camera_filepath = os.path.join(full_path,'camera_' + serial_number+'.MOV')
 		filepaths.append(camera_filepath)
 	# TODO: change file name to match the root folder name
-	audio_filepath = full_path+'/'+'audio.tdms'
+	audio_filepath = os.path.join(full_path,'audio.tdms')
 	filepaths.append(audio_filepath)
 	return filepaths

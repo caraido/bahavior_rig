@@ -38,7 +38,7 @@ ag = SLCam.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 #            'C:\\Users\\SchwartzLab\\Desktop\\Testing_Female2Record.tdms'
 # ]
 model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_first_try-Devon-2020-11-24\exported-models\DLC_Alec_first_try_resnet_50_iteration-0_shuffle-1'
-
+top_camera_ID = '17391304'
 
 def record_switch():
   # TODO: change to below
@@ -51,17 +51,20 @@ def record_switch():
   #     ag.start(filepath = thisFilePath, display = True)
   #     ag.run()
 
-  # remove below 
-  ag.cameras[0].saving_switch_on()
+  # remove below
+  top_camera = [cam for cam in ag.cameras if cam.device_serial_number==top_camera_ID]
+  top_camera[0].saving_switch_on()
   ag.nidaq.saving_switch_on()
 
 
 def dlc_switch():
-  ag.cameras[0].dlc_switch(model_path=model_path)
+  top_camera = [cam for cam in ag.cameras if cam.device_serial_number == top_camera_ID]
+  top_camera[0].dlc_switch(model_path=model_path)
 
 
 def ex_calibration_switch():
-  result = ag.cameras[0].extrinsic_calibration_switch()
+  top_camera = [cam for cam in ag.cameras if cam.device_serial_number == top_camera_ID]
+  result = top_camera[0].extrinsic_calibration_switch()
   # TODO: change mimetype to display on webpage based on the returned value type
   if isinstance(result, str):
     data_type = 'text/html'
@@ -72,7 +75,8 @@ def ex_calibration_switch():
 
 
 def in_calibration_switch():
-  result = ag.cameras[0].intrinsic_calibration_switch()
+  top_camera = [cam for cam in ag.cameras if cam.device_serial_number == top_camera_ID]
+  result = top_camera[0].intrinsic_calibration_switch()
   # TODO: change mimetype to display on webpage based on the returned value type
   if isinstance(result, str):
     data_type = 'text/html'

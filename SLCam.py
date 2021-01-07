@@ -24,11 +24,12 @@ BUFFER_TIME = .005  # time in seconds allowed for overhead
 
 
 class CharucoBoard:
-  def __init__(self, x, y, marker_size=0.8):
+  def __init__(self, x, y, marker_size=0.8,type=None):
     self.x = x
     self.y = y
     self.marker_size = marker_size
-    self.default_dictionary = cv2.aruco.DICT_4X4_50  # default
+    #self.default_dictionary = cv2.aruco.DICT_4X4_50  # default
+    self.default_dictionary = type
     self.seed = 0
     self.dictionary = cv2.aruco.getPredefinedDictionary(
         self.default_dictionary)
@@ -53,16 +54,31 @@ class CharucoBoard:
     else:
       self._marker_size = value
 
+  @property
+  def default_dictionary(self):
+    return self._default_dictionary
+
+  @default_dictionary.setter
+  def default_dictionary(self, type):
+    if type is None:
+      self._default_dictionary = cv2.aruco.DICT_4X4_50
+    elif type == 'intrinsic':
+      self._default_dictionary = cv2.aruco.DICT_5X5_50
+    elif type == 'extrinsic':
+      self._default_dictionary = cv2.aruco.DICT_4X4_50
+    else:
+      raise ValueError('wrong type')
+
   def save_board(self, img_size=1000):
-    if self.default_dictionary == 0:
-      file_name = 'charuco_board_shape_' + str(self.x) + 'x' + str(self.y) + '_marker_size_' + str(
-          self.marker_size) + '_default.png'
-      img = self.board.draw((img_size, img_size))
-      result = cv2.imwrite('./multimedia/board/' + file_name, img)
-      if result:
-        print('save board successfully! Name: ' + file_name)
-      else:
-        raise Exception('save board failed! Name: '+file_name)
+    file_name = 'charuco_board_shape_%dx%d_marker_size_%d_default_%d.png' % (
+    self.x, self.y, self.marker_size, self.default_dictionary)
+    img = self.board.draw((img_size, img_size))
+    result = cv2.imwrite('./multimedia/board/' + file_name, img)
+    if result:
+      print('save board successfully! Name: ' + file_name)
+    else:
+      raise Exception('save board failed! Name: ' + file_name)
+
 
   def print_board(self):
     img = self.board.draw((1000, 1000))
@@ -75,20 +91,29 @@ class Calib:
   def __init__(self, calib_type):
     self._get_type(calib_type)
 
+    self.root_config_path = None
+
     self.allCorners = []
     self.allIds = []
     self.decimator = 0
     self.config = None
 
-    self.board = CharucoBoard(x=6, y=2).board
+    self.charuco_board = CharucoBoard(x=self.x, y=self.y, type=self.type)
+    self.board = self.charuco_board.board
 
     self.max_size = cau.get_expected_corners(self.board)
-    self.save_path = './config/config_'+self.type+'_'
-    self.load_path = './config/'
+    #self.save_path = './config/config_'+self.type+'_'
+    self.load_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
 
   def _get_type(self, calib_type):
-    if calib_type == 'intrinsic' or calib_type == 'extrinsic':
+    if calib_type == 'extrinsic':
       self.type = calib_type
+      self.x = 6
+      self.y = 2
+    elif calib_type == 'intrinsic':
+      self.type = calib_type
+      self.x = 4
+      self.y = 5
     else:
       raise ValueError("type can only be intrinsic or extrinsic!")
 
@@ -109,58 +134,87 @@ class Calib:
     params.adaptiveThreshConstant = 5
     return params
 
-  def load_config(self, camera_serial_number):
-    if not os.path.exists(self.load_path):
-      os.mkdir(self.load_path)
-      raise Warning("config directory doesn't exist. creating one...")
+  @property
+  def root_config_path(self):
+    return self._root_config_path
 
-    items = os.listdir(self.load_path)
-    for item in items:
-      if camera_serial_number in item and self.type in item:
-        path = self.load_path+'config_' + self.type + \
-            '_' + camera_serial_number + '.toml'
-        with open(path, 'r') as f:
-          # there only should be only one calib file for each camera
-          self.config = toml.load(f)
-          try:
-            self.config['ids'] = cau.reformat(self.config['ids'])
-            self.config['corners'] = cau.reformat(self.config['corners'])
-            markers = pd.DataFrame({'truecorners': list(self.config['corners'])},
-                                                  index=list(self.config['ids']))
-            self.config['markers'] = markers
-          except ValueError:
-            print("there's nothing in the configuration file called ids! Please check.")
+  @root_config_path.setter
+  def root_config_path(self, path):
+    if path is not None:
+      if os.path.exists(path):
+        try:
+          os.mkdir(os.path.join(path, 'config'))  # is it needed?
+        except:
+          pass
+        self._root_config_path = os.path.join(path, 'config')
+      else:
+        raise FileExistsError("root file folder doens't exist!")
+    else:
+      self._root_config_path = None
+
+    # load configuration only for extrinsic calibration
+    def load_ex_config(self, camera_serial_number):
+      if not os.path.exists(self.load_path):
+        os.mkdir(self.load_path)
+        raise Warning("config directory doesn't exist. creating one...")
+
+      items = os.listdir(self.load_path)
+      for item in items:
+        if camera_serial_number in item and self.type in item:
+          path = os.path.join(self.load_path, 'config_%s_%d.toml' % (self.type, camera_serial_number))
+          with open(path, 'r') as f:
+            # there only should be only one calib file for each camera
+            self.config = toml.load(f)
+            try:
+              self.config['ids'] = cau.reformat(self.config['ids'])
+              self.config['corners'] = cau.reformat(self.config['corners'])
+              markers = pd.DataFrame({'truecorners': list(self.config['corners'])},
+                                     index=list(self.config['ids']))
+              self.config['markers'] = markers
+            except ValueError:
+              print("Missing ids/corners/markers in the configuration file. Please check.")
 
 
   def save_config(self, camera_serial_number, width, height):
-    save_path = self.save_path + camera_serial_number + '.toml'
+    save_path = os.path.join(self.root_config_path, 'config_%s_%s.toml' % (self.type, camera_serial_number))
+    save_copy_path = os.path.join(self.load_path,'config_%s_%s.toml' % (self.type, camera_serial_number))  # overwrite
+
     if os.path.exists(save_path):
-      print('Configuration file already exists.')
+      return 'Configuration file already exists.'
     else:
       if self.type == "intrinsic":
+        # time consuming
         param = cau.quick_calibrate(self.allCorners,
-                                    self.allIds,
-                                    self.board,
-                                    width,
-                                    height)
+                                self.allIds,
+                                self.board,
+                                width,
+                                height)
         param['camera_serial_number'] = camera_serial_number
-        if len(param)>1:
+        param['date'] = time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())
+        if len(param) > 2:
           with open(save_path, 'w') as f:
             toml.dump(param, f)
-          print('intrinsic calibration configuration saved!')
+          # save a copy to the configuration folder. Overwrite the previous one
+          with open(save_copy_path, 'w') as f:
+            toml.dump(param, f)
+
+          return "intrinsic calibration configuration saved!"
         else:
-          print("intrinsic calibration configuration NOT saved due to lack of markers.")
+          return "intrinsic calibration configuration NOT saved due to lack of markers."
       else:
-        if self.allIds is not None and not len(self.allIds)<self.max_size+1:
+        if self.allIds is not None and not len(self.allIds) < self.max_size + 1:
           param = {'corners': np.array(self.allCorners),
                    'ids': np.array(self.allIds), 'CI': 5,
-                   'camera_serial_number': camera_serial_number}
+                   'camera_serial_number': camera_serial_number,
+                   'date': time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())}
           with open(save_path, 'w') as f:
             toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
-            print('extrinsic calibration configuration saved!')
+          with open(save_copy_path, 'w') as f:
+            toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
+
+          return 'extrinsic calibration configuration saved!'
         else:
-          # TODO: should be a pop up window/show up on the screen
-          raise Exception("failed to record all Ids! can't save configuration. Please calibrate again.")
+          return "failed to record all Ids! Can't save configuration. Please calibrate again."
 
 
 class Camera:
@@ -208,6 +262,9 @@ class Camera:
 
   def start(self, filepath=None, display=False):
     if filepath:
+      rootpath = os.path.split(filepath)[0]
+      self.in_calib.root_config_path=rootpath
+      self.ex_calib.root_config_path=rootpath
       #self._saving = True
 
       # we will assume hevc for now
@@ -843,6 +900,10 @@ class AcquisitionGroup:
 
 
 if __name__ == '__main__':
-  ag = AcquisitionGroup()
-  ag.start()
-  ag.run()
+  #ag = AcquisitionGroup()
+  #ag.start()
+  #ag.run()
+
+  calib=Calib('intrinsic')
+  calib.charuco_board.save_board()
+
