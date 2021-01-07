@@ -88,7 +88,9 @@ class AcquisitionGroup:
       self.pg(rootpath,model_path)
       self.post_analysis = threading.Thread(
         target = self.pg.post_process)
-      self.post_analysis.start()
+      try:
+        self.post_analysis.start()
+      except Warning("Post analysis failed. Have to do it manually.")
     # ProcessGroup takeover?
 
     # TODO: should be able to remove this

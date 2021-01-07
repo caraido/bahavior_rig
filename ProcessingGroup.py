@@ -37,7 +37,10 @@ import os
 from nptdms import TdmsFile
 from main import audio_settings
 import scipy.io as sio
+import shutil
 
+
+HDD_path = r'E:\behavior_data_archive'
 
 class ProcessingGroup:
 
@@ -116,4 +119,14 @@ class ProcessingGroup:
 
 	def SSD2HDD(self):
 		# copy and paste
+		name = os.path.split(self.rootpath)[-1]
+		backup_path = os.path.join(HDD_path,name)
+		try:
+			shutil.copytree(self.rootpath, backup_path)
+		except shutil.Error as e:
+			for src, dst, msg in e.args[0]:
+				# src is source name
+				# dst is destination name
+				# msg is error message from exception
+				print(dst, src, msg)
 		pass
