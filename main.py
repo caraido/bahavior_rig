@@ -1,34 +1,13 @@
 import AcquisitionGroup
 from flask import Flask, Response, render_template, request, redirect, url_for
 from utils import path_operation_utils as pop
+from utils.audio_settings import audio_settings
 
-audio_settings = {
-    'fs': 3e5,  # sample rate TODO: find a better frequency for the fft e.g. 2^18 ~ 262k
-    'fMin': 200,
-    'fMax': 40000,
-    'nFreq': 1e2,  # number of frequencies to plot
-    'fScale': 'log',  # frequency spacing, linear or log
-    'window': .0032,  # length of window in seconds ~ this is 960 -> 1024?
-    'overlap': .875,  # fractional overlap
-    'correction': True,  # whether to correct for 1/f noise
-    'readRate': 1,  # how frequently to read data from the Daq's off-board data buffer
-    # TODO: rename readRate to readPeriod
-
-    # notes on parameters:
-
-    # window, overlap, fMin, fMax are taken from deepsqueak
-    # fs needs to be at least twice the highest frequency of interest, ideally higher
-    # window*fs should be a power of 2 (or at least even) for optimal computation of fft
-    # the higher the readRate, the better the performance, but the latency of plotting increases
-
-    # nFreq determines the number of frequencies that are plotted (by cubic interpolation), not calculated
-    # the browser also performs some interpolation, so nFreq should be as low as possible to see features of interest
-}
 
 app = Flask(__name__)
 
 ag = AcquisitionGroup.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
-
+ag.start(isDisplayed=True)
 # default filepath
 # filepath = ['C:\\Users\\SchwartzLab\\Desktop\\Testing_Female2Record.mov',
 #            None,
@@ -37,21 +16,22 @@ ag = AcquisitionGroup.AcquisitionGroup(frame_rate=30, audio_settings=audio_setti
 # ]
 model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_first_try-Devon-2020-11-24\exported-models\DLC_Alec_first_try_resnet_50_iteration-0_shuffle-1'
 
+save_path = None
 
 def record_switch():
   # TODO: change to below
-  # if ag.filepath is not None:
-  #     ag.stop()
-  #     ag.start(filepath = None, display = True)
-  #     ag.run()
-  # else....
-  #     ag.stop()
-  #     ag.start(filepath = thisFilePath, display = True)
-  #     ag.run()
+  if ag.filepaths is not None:
+     ag.stop()
+     ag.start(filepaths=None, isDisplayed=True)
+     ag.run()
+  else:
+     ag.stop()
+     ag.start(filepaths=save_path, isDisplayed=True)
+     ag.run()
 
   # remove below
-  ag.cameras[0].saving_switch_on()
-  ag.nidaq.saving_switch_on()
+  #ag.cameras[0].saving_switch_on()
+  #ag.nidaq.saving_switch_on()
 
 
 def dlc_switch():
@@ -87,8 +67,10 @@ def get_filepath():
   for i in range(nCamera):
     camera_list.append(ag.cameras[i].device_serial_number)
   path = pop.reformat_filepath(path, name, camera_list)
-  ag.filepaths = path
-  # return Response(status = 200)
+  #ag.filepaths = path
+  global save_path
+  save_path=path
+  return Response(status=200)
 
 # def get_current_settings():
   #name_of_setting = request.values['setting_name']
@@ -99,7 +81,7 @@ def get_filepath():
 
 api_switch = {
     'confirm and submit': get_filepath,
-    'start': lambda: ag.start(isDisplayed=True),
+    #'start': lambda: ag.start(isDisplayed=True),
     'trace': dlc_switch,
     'record': record_switch,
     'save and quit': ag.stop,

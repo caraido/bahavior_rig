@@ -35,12 +35,13 @@ from utils.geometry_utils import find_window_center
 from utils.dlc_utils import dlc_analysis
 import os
 from nptdms import TdmsFile
-from main import audio_settings
+from utils.audio_settings import audio_settings
 import scipy.io as sio
 import shutil
 
-
+model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second_try-Devon-2020-12-07\config.yaml'
 HDD_path = r'E:\behavior_data_archive'
+
 
 class ProcessingGroup:
 
@@ -49,11 +50,15 @@ class ProcessingGroup:
 		self.dlcpath = None
 
 
-	def __call__(self, rootpath,dlcpath):
+	def __call__(self, rootpath,dlcpath=model_path):
 		self.dlcpath =dlcpath
 		self.rootpath=rootpath
 		self.processpath = os.path.join(self.rootpath, 'processed') # make it a property
 		self.config_path = os.path.join(self.rootpath,'config')
+		if not os.path.exists(self.processpath):
+			os.mkdir(self.processpath)
+		if not os.path.exists(self.config_path):
+			os.mkdir(self.config_path)
 
 	def copy_configs(self):
 		if self.rootpath:
@@ -65,6 +70,9 @@ class ProcessingGroup:
 					 dsqk=True,
 					 server=True,
 					 HDD=True):
+
+		self.copy_configs()
+
 		if calib:
 			self.post_calibration()
 		if mat:
@@ -95,7 +103,7 @@ class ProcessingGroup:
 
 	def tdms2mat(self):
 		dir_list = os.listdir(self.rootpath)
-		item_list = [self.rootpath + item for item in dir_list if '.tdms' in item and '.tdms_index' not in item]
+		item_list = [os.path.join(self.rootpath, item) for item in dir_list if '.tdms' in item and '.tdms_index' not in item]
 		f = item_list[0]
 
 		with TdmsFile.open(f) as file:

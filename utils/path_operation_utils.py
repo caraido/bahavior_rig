@@ -3,9 +3,11 @@ import time
 import shutil
 import toml
 
-saving_path_prefix = 'C:/Users/SchwartzLab'
+#saving_path_prefix = 'C:/Users/SchwartzLab'
+saving_path_prefix = 'D:\\'
 default_saving_path= 'Desktop'
 default_folder_name = 'Testing'
+global_config_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
 
 @property
 def get_saving_path_prefix():
@@ -72,7 +74,7 @@ def reformat_filepath(path,name,camera:list):
 
 	filepaths = []
 	for serial_number in camera:
-		camera_filepath = os.path.join(full_path,'camera_%d.MOV'%serial_number)
+		camera_filepath = os.path.join(full_path,'camera_%s.MOV'%serial_number)
 		filepaths.append(camera_filepath)
 
 	audio_filepath = os.path.join(full_path,'audio.tdms')
@@ -81,13 +83,12 @@ def reformat_filepath(path,name,camera:list):
 
 def copy_config(filepath):
 	local_config_path = os.path.join(filepath, 'config')
-	global_config_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
-
 	if not os.path.exists(local_config_path):
 		os.mkdir(local_config_path)
-		global_configs = os.listdir(global_config_path)
-		for item in global_configs:
-			shutil.copy(os.path.join(global_config_path, item), local_config_path)
+	global_configs = os.listdir(global_config_path)
+	for item in global_configs:
+		shutil.copy(os.path.join(global_config_path, item), local_config_path)
+
 
 def load_config(filepath):
 	local_config_path = os.path.join(filepath,'config')

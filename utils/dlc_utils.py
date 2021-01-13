@@ -10,6 +10,10 @@ def dlc_analysis(root_path, dlc_config_path):
 	config_path = os.path.join(root_path,'config')
 	things = os.listdir(processed_path)
 	movie = [a for a in things if '.MOV' in a and '17391304']
+	if len(movie)==0:
+		things=os.listdir(root_path)
+		movie= [a for a in things if '.MOV' in a and '17391304']
+		print("didn't find the processed videos. Analyzing on the raw video")
 	movie_path = os.path.join(processed_path, movie[0])
 
 	deeplabcut.analyze_videos(dlc_config_path,

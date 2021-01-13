@@ -13,6 +13,7 @@ import subprocess as sp
 import re
 
 CALIB_UPDATE_EACH = 3 # frame interval for calibration update
+GLOBAL_CONFIG_PATH = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig'
 
 def get_expected_corners(board):
   board_size = board.getChessboardSize()
@@ -227,8 +228,8 @@ class CharucoBoard:
 class Calib:
   def __init__(self, calib_type):
     self._get_type(calib_type)
-
-    self.root_config_path = None
+    # TODO: how to set the local config path without assigning it?? Or should we
+    self.root_config_path = GLOBAL_CONFIG_PATH
 
     self.allCorners = []
     self.allIds = []
@@ -238,7 +239,7 @@ class Calib:
     self.board = self.charuco_board.board
 
     self.max_size = get_expected_corners(self.board)
-    self.load_path = './config/'
+    self.load_path = GLOBAL_CONFIG_PATH
 
   def _get_type(self, calib_type):
     if calib_type == 'extrinsic':
@@ -309,11 +310,12 @@ class Calib:
             print("Missing ids/corners/markers in the configuration file. Please check.")
 
   def save_config(self, camera_serial_number, width, height):
-    save_path = os.path.join(self.root_config_path, 'config_%s_%d.toml'%(self.type,camera_serial_number))
+    save_path = os.path.join(self.root_config_path, 'config_%s_%s.toml'%(self.type,camera_serial_number))
     save_copy_path = self.load_path # overwrite
 
-    if os.path.exists(save_path):
-      return 'Configuration file already exists.'
+    if 0: #os.path.exists(save_path):
+      #return 'Configuration file already exists.'
+      pass
     else:
       if self.type == "intrinsic":
         # time consuming
@@ -324,18 +326,18 @@ class Calib:
                                     height)
         param['camera_serial_number'] = camera_serial_number
         param['date'] = time.strftime("%Y-%m-%d-_%H:%M:%S",time.localtime())
-        if len(param) > 1:
+        if len(param) > 2:
           with open(save_path, 'w') as f:
             toml.dump(param, f)
           # save a copy to the configuration folder. Overwrite the previous one
-          with open(save_copy_path,'w') as f:
-            toml.dump(param, f)
+          #with open(save_copy_path,'w') as f:
+          #  toml.dump(param, f)
 
           return "intrinsic calibration configuration saved!"
         else:
           return "intrinsic calibration configuration NOT saved due to lack of markers."
       else:
-        if self.allIds is not None and not len(self.allIds) < self.max_size+1:
+        if self.allIds is not None and len(self.allIds) == self.max_size+1:
           param = {'corners': np.array(self.allCorners),
                    'ids': np.array(self.allIds), 'CI': 5,
                    'camera_serial_number': camera_serial_number,
@@ -390,7 +392,7 @@ class Calib:
           detectedCorners, detectedIds, frame, self.board)
         #if detectedCorners is not None and 2 <= len(
         #        detectedCorners) <= self.max_size:
-        if detectedCorners is not None and len(detectedCorners)==self.max_size:
+        if detectedCorners is not None and len(detectedCorners)==self.max_size+1:
           self.allCorners=detectedCorners
           self.allIds=detectedIds
           allDetected=True
@@ -480,8 +482,6 @@ def undistort_videos(rootpath):
   raw_items = os.listdir(rootpath)
   config_path = os.path.join(rootpath,'config')
   items = os.listdir(config_path)
-  if not os.path.exists(os.path.join(rootpath,'processed')):
-    os.mkdir(os.path.join(rootpath,'processed'))
   processed_path = os.path.join(rootpath,'processed')
 
   intrinsics = None
@@ -500,6 +500,7 @@ def undistort_videos(rootpath):
       movie = [a for a in raw_items if serial_number in a and '.MOV' in a]
       movie_path = os.path.join(rootpath,movie[0])
 
+      # TODO: frame rate needs to coordinate with raw video
       video_writer = ffmpeg \
         .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{width}x{height}', framerate=30) \
         .output(os.path.join(processed_path,'undistorted_'+movie[0]), vcodec='libx265') \
@@ -510,9 +511,10 @@ def undistort_videos(rootpath):
       ret =True
       while ret:
         ret,frame=cap.read()
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        dst = cv2.undistort(gray, mtx, dist, None, newcameramtx)
-        video_writer.stdin.write(data=dst.tobytes())
+        if ret:
+          gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+          dst = cv2.undistort(gray, mtx, dist, None, newcameramtx)
+          video_writer.stdin.write(dst.tobytes())
       video_writer.stdin.close()
       video_writer.wait()
       del video_writer
@@ -538,7 +540,7 @@ def undistort_markers(rootpath):
       mtx = np.array(in_config['camera_mat'])
       dist = np.array(in_config['dist_coeff'])
 
-      with open(os.path.join(config_path,'config_extrinsic_%s.toml)'%serial_number),'r') as f:
+      with open(os.path.join(config_path,'config_extrinsic_%s.toml'%serial_number),'r') as f:
         ex_config = toml.load(f)
       corners=np.array(ex_config['corners'])
       shape = corners.shape
@@ -546,8 +548,8 @@ def undistort_markers(rootpath):
       for i in range(shape[0]):
         new_corner = cv2.undistortPoints(corners[i],mtx,dist,P=mtx)
         new_corners.append(new_corner)
-      undistort_corners=np.array(new_corners).tolist()
+      undistort_corners=np.swapaxes(np.array(new_corners),1,2).tolist()
       new_item = {'undistorted_corners': undistort_corners}
 
-      with open(os.path.join(config_path, intrinsic), 'a') as f:
+      with open(os.path.join(config_path, 'config_extrinsic_%s.toml'%serial_number), 'a') as f:
         toml.dump(new_item,f)

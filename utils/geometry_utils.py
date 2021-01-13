@@ -106,7 +106,7 @@ def find_window_center(rootpath):
         with open(os.path.join(config_folder_path,extrinsic[0]),'r') as f:
             config = toml.load(f)
         try:
-            new_corners = np.array(config['new_corners'])
+            new_corners = np.array(config['undistorted_corners'])
         except:
             new_corners = np.array(config['corners'])
         ids=config['ids']
@@ -175,13 +175,13 @@ def find_board_center_and_windows(corners:np.ndarray,rig:dict):
     C2 = np.mean(rank_distance(winC2),axis=0)
 
     circle_center = get_mean_circle_center([A1,A2,B1,B2,C1,C2])
-    circle_center.dtype=int
-    A1.dtype=int
-    A2.dtype=int
-    B1.dtype=int
-    B2.dtype=int
-    C1.dtype=int
-    C2.dtype=int
+    circle_center=circle_center.astype(np.int)
+    A1=A1.astype(np.int)
+    A2=A2.astype(np.int)
+    B1=B1.astype(np.int)
+    B2=B2.astype(np.int)
+    C1=C1.astype(np.int)
+    C2=C2.astype(np.int)
 
     results = {'recorded_center': circle_center,
                  'A1':A1,
@@ -358,104 +358,108 @@ class Gaze_angle:
         coord = os.path.join(root_path,name[0])
         pose = pd.read_csv(coord, header=[1,2])
 
-        new_pose = pd.DataFrame()
-
         # cutoff (doesn't know if it works
         pose.loc[pose.leftear.likelihood < cutoff, [('leftear', 'x'), ('leftear', 'y')]] = np.nan
         pose.loc[pose.rightear.likelihood < cutoff, [('rightear', 'x'), ('rightear', 'y')]] = np.nan
         pose.loc[pose.snout.likelihood < cutoff, [('snout', 'x'), ('snout', 'y')]] = np.nan
         pose.loc[pose.tailbase.likelihood < cutoff, [('tailbase', 'x'), ('tailbase', 'y')]] = np.nan
+        empty = [pose['leftear']['x'].sum(),pose['leftear']['y'].sum(),
+                pose['rightear']['x'].sum(),pose['rightear']['y'].sum(),
+                pose['snout']['x'].sum(),pose['snout']['y'].sum(),
+                pose['tailbase']['x'].sum(),pose['tailbase']['y'].sum()]
+        if not any(np.array(empty)==0):
+            # gaze
+            inner_left,outer_left, inner_right, outer_right = project_from_head_to_walls(pose,
+                                                                                          self.inner_r_pixel,
+                                                                                          self.outer_r_pixel,
+                                                                                          self.circle_center[np.newaxis, :],
+                                                                                          gazePoint=self.gazePoint)
+            # triangle area
+            head_triangle_area,body_triangle_area = triangle_area(pose)
 
-        # gaze
-        inner_left,outer_left, inner_right, outer_right = project_from_head_to_walls(pose,
-                                                                                      self.inner_r_pixel,
-                                                                                      self.outer_r_pixel,
-                                                                                      self.circle_center[np.newaxis, :],
-                                                                                      gazePoint=self.gazePoint)
-        # triangle area
-        head_triangle_area,body_triangle_area = triangle_area(pose)
+            # body center
+            body = body_center(pose)
+            recenter_body = body-self.circle_center[:,np.newaxis]
+            arc_body = np.arctan2(recenter_body[1],recenter_body[0])[:,np.newaxis]
 
-        # body center
-        body = body_center(pose)
-        recenter_body = body-self.circle_center[:,np.newaxis]
-        arc_body = np.arctan2(recenter_body[1],recenter_body[0])[:,np.newaxis]
+            # check if the body center is in experiment area
+            distance = np.linalg.norm(recenter_body,axis=0)
+            for i,dis in enumerate(distance):
+                if dis<self.inner_r_pixel or dis>self.outer_r_pixel:
+                    inner_left[i]=np.nan
+                    outer_left[i]=np.nan
+                    inner_right[i]=np.nan
+                    outer_right[i]=np.nan
+                    arc_body[i]=np.nan
 
-        # check if the body center is in experiment area
-        distance = np.linalg.norm(recenter_body,axis=0)
-        for i,dis in enumerate(distance):
-            if dis<self.inner_r_pixel or dis>self.outer_r_pixel:
-                inner_left[i]=np.nan
-                outer_left[i]=np.nan
-                inner_right[i]=np.nan
-                outer_right[i]=np.nan
-                arc_body[i]=np.nan
+            # in window
+            A_right = np.sum(is_in_window(outer_right,self.windowA,self.circle_center))
+            B_right = np.sum(is_in_window(outer_right, self.windowB, self.circle_center))
+            C_right = np.sum(is_in_window(outer_right, self.windowC, self.circle_center))
 
-        # in window
-        A_right = np.sum(is_in_window(outer_right,self.windowA,self.circle_center))
-        B_right = np.sum(is_in_window(outer_right, self.windowB, self.circle_center))
-        C_right = np.sum(is_in_window(outer_right, self.windowC, self.circle_center))
+            A_left = np.sum(is_in_window(outer_left, self.windowA, self.circle_center))
+            B_left = np.sum(is_in_window(outer_left, self.windowB, self.circle_center))
+            C_left = np.sum(is_in_window(outer_left, self.windowC, self.circle_center))
 
-        A_left = np.sum(is_in_window(outer_left, self.windowA, self.circle_center))
-        B_left = np.sum(is_in_window(outer_left, self.windowB, self.circle_center))
-        C_left = np.sum(is_in_window(outer_left, self.windowC, self.circle_center))
+            A_body = np.sum(is_in_window(arc_body, self.windowA, self.circle_center))
+            B_body = np.sum(is_in_window(arc_body, self.windowB, self.circle_center))
+            C_body = np.sum(is_in_window(arc_body, self.windowC, self.circle_center))
 
-        A_body = np.sum(is_in_window(arc_body, self.windowA, self.circle_center))
-        B_body = np.sum(is_in_window(arc_body, self.windowB, self.circle_center))
-        C_body = np.sum(is_in_window(arc_body, self.windowC, self.circle_center))
+            A_weight_right = A_right /  (A_right + B_right + C_right)
+            B_weight_right = B_right / (A_right + B_right + C_right)
+            C_weight_right = C_right / (A_right + B_right + C_right)
 
-        A_weight_right = A_right /  (A_right + B_right + C_right)
-        B_weight_right = B_right / (A_right + B_right + C_right)
-        C_weight_right = C_right / (A_right + B_right + C_right)
+            A_weight_left = A_left / (A_left + B_left + C_left)
+            B_weight_left = B_left / (A_left + B_left + C_left)
+            C_weight_left = C_left / (A_left + B_left + C_left)
 
-        A_weight_left = A_left / (A_left + B_left + C_left)
-        B_weight_left = B_left / (A_left + B_left + C_left)
-        C_weight_left = C_left / (A_left + B_left + C_left)
+            A_weight_body = A_body / (A_body + B_body + C_body)
+            B_weight_body = B_body / (A_body + B_body + C_body)
+            C_weight_body = C_body / (A_body + B_body + C_body)
 
-        A_weight_body = A_body / (A_body + B_body + C_body)
-        B_weight_body = B_body / (A_body + B_body + C_body)
-        C_weight_body = C_body / (A_body + B_body + C_body)
+            window_A_center = np.array(self.windowA) - np.array(self.circle_center)
+            window_B_center = np.array(self.windowB) - np.array(self.circle_center)
+            window_C_center = np.array(self.windowC) - np.array(self.circle_center)
 
-        window_A_center = np.array(self.windowA) - np.array(self.circle_center)
-        window_B_center = np.array(self.windowB) - np.array(self.circle_center)
-        window_C_center = np.array(self.windowC) - np.array(self.circle_center)
+            window_A_angle = np.arctan2(window_A_center[:, 1], window_A_center[:, 0])
+            window_B_angle = np.arctan2(window_B_center[:, 1], window_B_center[:, 0])
+            window_C_angle = np.arctan2(window_C_center[:, 1], window_C_center[:, 0])
 
-        window_A_angle = np.arctan2(window_A_center[:, 1], window_A_center[:, 0])
-        window_B_angle = np.arctan2(window_B_center[:, 1], window_B_center[:, 0])
-        window_C_angle = np.arctan2(window_C_center[:, 1], window_C_center[:, 0])
+            windows_arc= np.abs(window_A_angle[0]-window_A_angle[1])+\
+                         np.abs(window_B_angle[0]-window_B_angle[1])+\
+                         np.abs(window_C_angle[0]-window_C_angle[1])
 
-        windows_arc= np.abs(window_A_angle[0]-window_A_angle[1])+\
-                     np.abs(window_B_angle[0]-window_B_angle[1])+\
-                     np.abs(window_C_angle[0]-window_C_angle[1])
+            winPreference_right = ((A_right + B_right + C_right) / np.sum(pd.notna(outer_right))) * 2*np.pi/windows_arc
+            winPreference_left = ((A_left + B_left + C_left) / np.sum(pd.notna(outer_left))) * 2*np.pi/windows_arc
+            winPreference_body = ((A_body + B_body + C_body) / np.sum(pd.notna(arc_body))) * 2*np.pi/windows_arc
 
-        winPreference_right = ((A_right + B_right + C_right) / np.sum(pd.notna(outer_right))) * 2*np.pi/windows_arc
-        winPreference_left = ((A_left + B_left + C_left) / np.sum(pd.notna(outer_left))) * 2*np.pi/windows_arc
-        winPreference_body = ((A_body + B_body + C_body) / np.sum(pd.notna(arc_body))) * 2*np.pi/windows_arc
+            table = np.array([A_weight_right,B_weight_right,C_weight_right,winPreference_right,
+                              A_weight_left,B_weight_left,C_weight_left,winPreference_left,
+                              A_weight_body,B_weight_body,C_weight_body,winPreference_body
+                              ]).reshape([3,4])
+            column = ['windowA','windowB','windowC','window preference']
+            index = ['right','left','body']
+            stats=pd.DataFrame(table,columns=column,index=index)
+            stats=stats.to_dict()
 
-        table = np.array([A_weight_right,B_weight_right,C_weight_right,winPreference_right,
-                          A_weight_left,B_weight_left,C_weight_left,winPreference_left,
-                          A_weight_body,B_weight_body,C_weight_body,winPreference_body
-                          ]).reshape([3,4])
-        column = ['windowA','windowB','windowC','window preference']
-        index = ['right','left','body']
-        stats=pd.DataFrame(table,columns=column,index=index)
-        stats=stats.to_dict()
+            result = {'inner_left': np.transpose(inner_left)[0],
+                      'inner_right': np.transpose(inner_right)[0],
+                      'outer_left': np.transpose(outer_left)[0],
+                      'outer_right': np.transpose(outer_right)[0],
+                      'head_triangle_area':np.transpose(head_triangle_area),
+                      'body_triangle_area':np.transpose(body_triangle_area),
+                      'body_position':np.transpose(arc_body)[0],
+                      'stats':stats
+                      }
 
-        result = {'inner_left': np.transpose(inner_left)[0],
-                  'inner_right': np.transpose(inner_right)[0],
-                  'outer_left': np.transpose(outer_left)[0],
-                  'outer_right': np.transpose(outer_right)[0],
-                  'head_triangle_area':np.transpose(head_triangle_area),
-                  'body_triangle_area':np.transpose(body_triangle_area),
-                  'body_position':np.transpose(arc_body)[0],
-                  'stats':stats
-                  }
+            # save file
+            if save:
+                self.save(root_path, result)
+                print('saved')
 
-        # save file
-        if save:
-            self.save(root_path, result)
-            print('saved')
-
-        return result
+            return result
+        else:
+            return None
 
     def double(self,side):
         side=side[pd.notna(side)]
@@ -494,51 +498,50 @@ class Gaze_angle:
             data.to_csv(os.path.join(path,'gaze_angle_%d.csv'%int(self.gazePoint*180/np.pi)))
         else:
             filename = os.path.join(path,'gaze_angle_%d.mat'%int(self.gazePoint*180/np.pi))
-            matname = 'gaze_angle_%d.mat'%int(self.gazePoint*180/np.pi)
             sio.savemat(filename,data)
 
-    def plot(self,things:dict,savepath=None,show=False):
+    def plot(self,thing,savepath=None,show=False):
+        if thing is not None:
+            keys = ['inner_left','inner_right','outer_left','outer_right','body_position']
+            row=4
+            col=2
 
-        keys = ['inner_left','inner_right','outer_left','outer_right','body_position']
-        row=4
-        col=2
+            plt.figure(figsize=(14, 16))
+            for i in range(len(keys)):
+                plt.subplot(row, col, i+1)
 
-        plt.figure(figsize=(14, 16))
-        for i in range(len(keys)):
-            plt.subplot(row, col, i+1)
+                plt.axvspan(xmin=self.windows[0][0][0], xmax=self.windows[0][0][1], facecolor='orange', alpha=0.3)
+                plt.axvspan(xmin=self.windows[1][0][0], xmax=self.windows[1][0][1], facecolor='red', alpha=0.3)
+                plt.axvspan(xmin=self.windows[2][0][0], xmax=self.windows[2][0][1], facecolor='magenta', alpha=0.3)
+                plt.axvspan(xmin=self.windows[0][1][0], xmax=self.windows[0][1][1], facecolor='orange', alpha=0.3)
+                plt.axvspan(xmin=self.windows[1][1][0], xmax=self.windows[1][1][1], facecolor='red', alpha=0.3)
+                plt.axvspan(xmin=self.windows[2][1][0], xmax=self.windows[2][1][1], facecolor='magenta', alpha=0.3)
+                handles = [Rectangle((0, 0), 1, 1, color=c, ec="k", alpha=0.3) for c in ['orange', 'red', 'magenta']]
+                labels = ["window A", "window B", "window C"]
+                plt.legend(handles, labels)
+                plt.title("Gaze point density of %s " % list(keys)[i])
+                plt.hist(x=self.double(np.array(things[list(keys)[i]])), bins=60, density=False)
+            plt.suptitle(self.title_name +' gaze angle %d'%float(self.gazePoint*180/np.pi),fontsize=30)
 
-            plt.axvspan(xmin=self.windows[0][0][0], xmax=self.windows[0][0][1], facecolor='orange', alpha=0.3)
-            plt.axvspan(xmin=self.windows[1][0][0], xmax=self.windows[1][0][1], facecolor='red', alpha=0.3)
-            plt.axvspan(xmin=self.windows[2][0][0], xmax=self.windows[2][0][1], facecolor='magenta', alpha=0.3)
-            plt.axvspan(xmin=self.windows[0][1][0], xmax=self.windows[0][1][1], facecolor='orange', alpha=0.3)
-            plt.axvspan(xmin=self.windows[1][1][0], xmax=self.windows[1][1][1], facecolor='red', alpha=0.3)
-            plt.axvspan(xmin=self.windows[2][1][0], xmax=self.windows[2][1][1], facecolor='magenta', alpha=0.3)
-            handles = [Rectangle((0, 0), 1, 1, color=c, ec="k", alpha=0.3) for c in ['orange', 'red', 'magenta']]
-            labels = ["window A", "window B", "window C"]
-            plt.legend(handles, labels)
-            plt.title("Gaze point density of %s " % list(keys)[i])
-            plt.hist(x=self.double(np.array(things[list(keys)[i]])), bins=60, density=False)
-        plt.suptitle(self.title_name +' gaze angle %d'%float(self.gazePoint*180/np.pi),fontsize=30)
+            plt.subplot(4,1,4)
+            plt.axis('off')
+            stats = things['stats']
+            stats = pd.DataFrame(stats)
 
-        plt.subplot(4,1,4)
-        plt.axis('off')
-        stats = things['stats']
-        stats = pd.DataFrame(stats)
+            cell_text = []
+            for row in range(len(stats)):
+                cell_text.append(['%1.2f' % x for x in stats.iloc[row]])
 
-        cell_text = []
-        for row in range(len(stats)):
-            cell_text.append(['%1.2f' % x for x in stats.iloc[row]])
+            table = plt.table(cellText=cell_text,colLabels=stats.columns,rowLabels=stats.index,loc='center',cellLoc='center')
+            table.auto_set_font_size(False)
+            table.set_fontsize(20)
+            table.scale(1,3)
 
-        table = plt.table(cellText=cell_text,colLabels=stats.columns,rowLabels=stats.index,loc='center',cellLoc='center')
-        table.auto_set_font_size(False)
-        table.set_fontsize(20)
-        table.scale(1,3)
+            if savepath:
+                plt.savefig(os.path.join(savepath,'gaze','gaze_angle_%d.jpg'%float(self.gazePoint*180/np.pi)))
 
-        if savepath:
-            plt.savefig(os.path.join(savepath,'gaze','gaze_angle_%d.jpg'%float(self.gazePoint*180/np.pi)))
-
-        if show:
-            plt.show()
+            if show:
+                plt.show()
 
 if __name__ == '__main__':
     #import matlab.engine

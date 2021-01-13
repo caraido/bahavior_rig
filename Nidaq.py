@@ -17,7 +17,7 @@ class Nidaq(AcquisitionObject):
     self.parse_settings(audio_settings)
 
     AcquisitionObject.__init__(
-        self, self.run_rate, (self.sample_rate // self.run_rate, 1))
+        self, self.run_rate, (int(self.sample_rate // self.run_rate), 1))
 
     # TODO: verify that we are not violating the task state model: https://zone.ni.com/reference/en-XX/help/370466AH-01/mxcncpts/taskstatemodel/
     # specifically, if we change logging mode, do we need to re-commit the task??
@@ -41,7 +41,7 @@ class Nidaq(AcquisitionObject):
         TRIGGER_OUTPUT_CHANNEL, freq=self.trigger_freq, duty_cycle=DUTY_CYCLE
     )
     self.trigger_task.triggers.start_trigger.cfg_dig_edge_start_trig(
-        f"{AUDIO_INPUT_CHANNEL[:-1]}/StartTrigger"
+        f"/{AUDIO_INPUT_CHANNEL[:-1]}/StartTrigger"
     )  # start the video trigger with the audio channel
     self.trigger_task.timing.cfg_implicit_timing(
         sample_mode=nidaqmx.constants.AcquisitionType.CONTINUOUS
@@ -95,6 +95,8 @@ class Nidaq(AcquisitionObject):
 
     self.trigger_task.start()
     self.audio_task.start()
+    print('trigger on')
+    print('audio on')
 
   def prepare_processing(self, options):
     # in the future if we use deepsqueak for real-time annotation, we would set up for that here
@@ -103,7 +105,7 @@ class Nidaq(AcquisitionObject):
   def capture(self, data):
     while True:
       self._audio_reader.read_many_sample(
-          data,
+          data[:,0],
           number_of_samples_per_channel=self.data_size[0]
       )
       yield data

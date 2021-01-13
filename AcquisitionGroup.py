@@ -7,7 +7,7 @@ from Nidaq import Nidaq
 
 import ProcessingGroup as pg
 
-model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second_try-Devon-2020-12-07\exported-models\DLC_Alec_second_try_resnet_50_iteration-0_shuffle-1'
+
 class AcquisitionGroup:
   def __init__(self, frame_rate=30, audio_settings=None):
     self._system = PySpin.System.GetInstance()
@@ -39,11 +39,11 @@ class AcquisitionGroup:
 
     for child, fp, disp in zip(self.children, self.filepaths[: -1], isDisplayed[: -1]):
       child.start(filepath=fp, display=disp)
-      # print('starting camera ' + child.device_serial_number)
+      print('starting camera ' + child.device_serial_number)
 
     # once the camera BeginAcquisition methods are called, we can start triggering
-    # self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
-    # print('starting nidaq')
+    self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
+    print('starting nidaq')
 
   def run(self):
     # begin gathering samples
@@ -60,14 +60,14 @@ class AcquisitionGroup:
       if self._runners[i] is None or not self._runners[i].is_alive():
         self._runners[i] = threading.Thread(target=child.run)
         self._runners[i].start()
-
-      # if not self._runners[-1].is_alive():
-      #   self._runners[-1] = threading.Thread(target=self.nidaq.run)
+      #
+      #       # if not self._runners[-1].is_alive():
+      #       #   self._runners[-1] = threading.Thread(target=self.nidaq.run)
       #   self._runners[-1].start()
 
   def process(self, i, options):
-    # if it's recording, process() shouldn't be run.
-    if self.filepaths is None:
+    # if it's recording, process() shouldn't be run. except dlc
+    if not any(self.filepaths) or options['mode']=='DLC':
       if self._processors[i] is None or not self._processors[i].is_alive():
         self.children[i].processing = options
         self._processors[i] = threading.Thread(
@@ -80,12 +80,12 @@ class AcquisitionGroup:
     # self.nidaq.stop()  # make sure cameras are stopped before stopping triggers
     for child in self.children:
       child.stop()
-    del self
+    #del self.children
     self._processors = [None] * self.nChildren
 
-    if self.filepaths is not None:
-      rootpath = os.path.split(self.filepaths[0])[:-2]
-      self.pg(rootpath,model_path)
+    if any(self.filepaths):
+      rootpath = os.path.split(self.filepaths[0])[0]
+      self.pg(rootpath)
       self.post_analysis = threading.Thread(
         target = self.pg.post_process)
       try:
@@ -94,35 +94,60 @@ class AcquisitionGroup:
         Warning("Post analysis failed. Have to do it manually.")
     # ProcessGroup takeover?
 
-    # TODO: should be able to remove this
-    os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
-    os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms_index')
 
   def __del__(self):
-    for child in self.children:
-      del child
+    del self.children
     self._camlist.Clear()
     self._system.ReleaseInstance()
     # del self.nidaq
 
 
 if __name__ == '__main__':
-  from main import audio_settings
-  default_model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second_try-Devon-2020-12-07\exported-models'
-  filepaths = r'C:\Users\SchwartzLab\Desktop'
+  from utils.audio_settings import audio_settings
+  import utils.path_operation_utils as pop
+  default_model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second_try-Devon-2020-12-07\exported-models\DLC_Alec_second_try_resnet_50_iteration-0_shuffle-1'
+  filepaths = r'D:'
   ag = AcquisitionGroup(audio_settings=audio_settings)
   # preview
   ag.start()
   ag.run()
+  ag.cameras[0].display()
+  ag.stop()
 
-  # calibration/dlc
-  ag.process(0, {'mode': 'DLC', 'modelpath': default_model_path}) #'DLC'/'extrinsic'/'intrinsic'
-  ag.stop() # saving calibration stuff
+  # dlc
+  #ag.start()
+  #ag.run()
+  #ag.process(0, {'mode': 'DLC', 'modelpath': default_model_path}) #'DLC'/'extrinsic'/'intrinsic'
+  #ag.cameras[0].display()
+  #ag.stop() # saving calibration stuff
+
+  # calibration
+  ag.start()
+  ag.run()
+  ag.process(1,{'mode': 'extrinsic'})
+  ag.cameras[1].display()
+  ag.stop()
+
+  ag.start()
+  ag.run()
+  ag.process(0,{'mode': 'intrinsic'})
+  ag.process(0,{'mode':'extrinsic'}) # this shouldn't work
+  ag.stop()
+
+  camera_list = []
+  for i in range(ag.nCameras):
+    camera_list.append(ag.cameras[i].device_serial_number)
+  path='behavior_data_temp'
+  name = 'alec_testing'
+
+  paths = pop.reformat_filepath(path, name, camera_list)
 
   # record
-  ag.start(filepaths=[filepaths,filepaths,filepaths,filepaths])
+  ag.start(filepaths=paths)
   ag.run()
+  #ag.process(0,{'mode': 'intrinsic'})
+  ag.process(0,{'mode': 'DLC', 'modelpath': default_model_path}) # this should work when there's file path
 
-  ag.process(0,{'mode': 'DLC', 'modelpath': default_model_path}) # this shouldn't work when there's file path
+  ag.stop() # with post processing
 
-  ag.stop() # after this there should be post processing?
+

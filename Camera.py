@@ -37,6 +37,13 @@ class Camera(AcquisitionObject):
     # self._in_calibrating = False
     # self._ex_calibrating = False
 
+  # TODO: make sure this step should be in prepare_display or prepare_run
+  def prepare_display(self):
+    self._spincam.BeginAcquisition()
+
+  def end_display(self):
+    self._spincam.EndAcquisition()
+
   def prepare_processing(self, options):
     process = {}
 
@@ -56,7 +63,8 @@ class Camera(AcquisitionObject):
 
       # could move this to init if desired
       process['calibrator'] = Calib(options['mode'])
-      process['calibrator'].root_config_path= self.file # does this return the file path?
+      return process
+      #process['calibrator'].root_config_path= self.file # does this return the file path?
 
       #process['calibrator'].reset()
       #if options['mode'] == 'extrinsic':
@@ -103,7 +111,6 @@ class Camera(AcquisitionObject):
         raise Exception(f"Image incomplete with image status {status} ...")
       # frame = np.reshape(im.GetData(), self.size)
       data = im.GetNDArray()  # TODO: check that this works!!
-
       im.Release()
       yield data
 
@@ -214,4 +221,7 @@ class Camera(AcquisitionObject):
 #      copy_config(self.file)
 
   def close(self):
+    self._spincam.DeInit()
+
+  def __del__(self):
     self._spincam.DeInit()

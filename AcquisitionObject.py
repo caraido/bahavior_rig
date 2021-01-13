@@ -240,7 +240,8 @@ class AcquisitionObject:
 
   @process_rate.setter
   def process_rate(self, process_rate):
-    self._process_interval = (1/process_rate) - BUFFER_TIME
+    #self._process_interval = (1/process_rate) - BUFFER_TIME # division by zero error
+    self._process_interval = (1/(process_rate+0.000001)-BUFFER_TIME)
 
   @property
   def data_size(self):
@@ -269,8 +270,10 @@ class AcquisitionObject:
   def display(self):
     frame_bytes = BytesIO()
     last_count = 0
-
-    data, data_count = self.data_and_count
+    try:
+      data, data_count = self.data_and_count
+    except:
+      data=None
     last_data_time = time.time()
 
     while data is not None:
@@ -291,7 +294,7 @@ class AcquisitionObject:
 
     self._has_runner = True
     data = self.new_data
-    capture = self.capture(self.new_data)
+    capture = self.capture(data)
     data_time = time.time() - self.run_interval
 
     while True:
@@ -325,8 +328,10 @@ class AcquisitionObject:
 
     while True:
       self.sleep(results_time)
-
-      data, data_count = self.data_and_count
+      try:
+        data, data_count = self.data_and_count
+      except:
+        continue
 
       if data_count == last_data_count:
         results_time = time.time()
@@ -341,6 +346,8 @@ class AcquisitionObject:
             self._processing = process
         else:
           self._has_processor = False
+          # TODO: return what?
+
           return
 
       # buffer the current data
