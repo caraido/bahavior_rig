@@ -142,7 +142,10 @@ class AcquisitionObject:
   @property
   def data(self):
     with self._data_lock:
-      return self._data.copy()
+      if self._data is None:
+        return None
+      else:
+        return self._data.copy()
 
   @property
   def data_count(self):
@@ -152,7 +155,10 @@ class AcquisitionObject:
   @property
   def data_and_count(self):
     with self._data_lock:
-      return self._data.copy(), self._data_count
+      if self._data is None:
+        return None, 0
+      else:
+        return self._data.copy(), self._data_count
 
   @property
   def new_data(self):
