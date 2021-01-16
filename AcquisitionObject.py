@@ -240,7 +240,7 @@ class AcquisitionObject:
 
   @process_rate.setter
   def process_rate(self, process_rate):
-    #self._process_interval = (1/process_rate) - BUFFER_TIME # division by zero error
+    # self._process_interval = (1/process_rate) - BUFFER_TIME # division by zero error
     self._process_interval = (1/(process_rate+0.000001)-BUFFER_TIME)
 
   @property
@@ -273,12 +273,13 @@ class AcquisitionObject:
     try:
       data, data_count = self.data_and_count
     except:
-      data=None
+      data = None
     last_data_time = time.time()
 
     while data is not None:
       if data_count > last_count:
         last_data_time = time.time()
+        last_count = data_count
         data = self.predisplay(data)  # do any additional frame workup
 
         frame_bytes.seek(0)
