@@ -2,9 +2,17 @@ import AcquisitionGroup
 from flask import Flask, Response, render_template, request, redirect, url_for
 from utils import path_operation_utils as pop
 from utils.audio_settings import audio_settings
+from flask_socketio import SocketIO, emit
+import behavior_gui.testDefs as testDefs
+import eventlet
+from threading import Thread
+
+eventlet.monkey_patch()
+bgthread=Thread()
 
 
 app = Flask(__name__)
+socketio=SocketIO(app,cors_allows_origin='*',async_mode='eventlet')
 
 ag = AcquisitionGroup.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
 ag.start(isDisplayed=True)
@@ -14,7 +22,7 @@ ag.start(isDisplayed=True)
 #            None,
 #            'C:\\Users\\SchwartzLab\\Desktop\\Testing_Female2Record.tdms'
 # ]
-model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_first_try-Devon-2020-11-24\exported-models\DLC_Alec_first_try_resnet_50_iteration-0_shuffle-1'
+model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second_try-Devon-2020-12-07\exported-models\DLC_Alec_second_try_resnet_50_iteration-0_shuffle-1'
 
 save_path = None
 
@@ -35,7 +43,11 @@ def record_switch():
 
 
 def dlc_switch():
-  ag.cameras[0].dlc_switch(model_path=model_path)
+    if ag.started and not ag.processing and ag.filepaths is not None:
+        ag.process(i=0,options={'mode': 'DLC', 'modelpath': model_path})
+    if ag.started and ag.processing:
+        ag.stop()
+
 
 
 def ex_calibration_switch():

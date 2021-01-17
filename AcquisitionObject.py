@@ -142,7 +142,10 @@ class AcquisitionObject:
   @property
   def data(self):
     with self._data_lock:
-      return self._data.copy()
+      if self._data is None:
+        return None
+      else:
+        return self._data.copy()
 
   @property
   def data_count(self):
@@ -152,7 +155,10 @@ class AcquisitionObject:
   @property
   def data_and_count(self):
     with self._data_lock:
-      return self._data.copy(), self._data_count
+      if self._data is None:
+        return None,0
+      else:
+        return self._data.copy(),self._data_count
 
   @property
   def new_data(self):
@@ -265,28 +271,30 @@ class AcquisitionObject:
   def sleep(self, last):
     pause_time = last + self.run_interval - time.time()
     if pause_time > 0:
+      print('sleeping for ', pause_time, ' seconds')
       time.sleep(pause_time)
 
   def display(self):
     frame_bytes = BytesIO()
     last_count = 0
-    try:
-      data, data_count = self.data_and_count
-    except:
-      data=None
-    last_data_time = time.time()
 
-    while data is not None:
+    data, data_count = self.data_and_count
+
+    last_data_time = time.time()
+    while True:
+      print('trying new frame')
       if data_count > last_count:
+        print('new frame')
         last_data_time = time.time()
         data = self.predisplay(data)  # do any additional frame workup
-
+        last_count = data_count
         frame_bytes.seek(0)
         Image.fromarray(data).save(frame_bytes, 'bmp')
         yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_bytes.getvalue() + b'\r\n')
       else:
         self.sleep(last_data_time)
       data, data_count = self.data_and_count
+
 
   def run(self):
     if self._has_runner:

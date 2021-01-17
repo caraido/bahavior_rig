@@ -23,6 +23,10 @@ class AcquisitionGroup:
     self._runners = [None] * self.nChildren
     self.filepaths = None
 
+    self.started=False
+    self.processing=False
+    self.running=False
+
     self.pg = pg.ProcessingGroup()
 
   def start(self, filepaths=None, isDisplayed=True):
@@ -45,7 +49,10 @@ class AcquisitionGroup:
     self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
     print('starting nidaq')
 
+    self.started= True
+
   def run(self):
+    print('called ag.run')
     # begin gathering samples
     # if not self._runners:  # if self._runners == []
     #   for i, child in enumerate(self.children):
@@ -60,10 +67,12 @@ class AcquisitionGroup:
       if self._runners[i] is None or not self._runners[i].is_alive():
         self._runners[i] = threading.Thread(target=child.run)
         self._runners[i].start()
+    self.running=True
       #
       #       # if not self._runners[-1].is_alive():
       #       #   self._runners[-1] = threading.Thread(target=self.nidaq.run)
       #   self._runners[-1].start()
+    print('finished ag.run')
 
   def process(self, i, options):
     # if it's recording, process() shouldn't be run. except dlc
@@ -73,6 +82,7 @@ class AcquisitionGroup:
         self._processors[i] = threading.Thread(
             target=self.children[i].run_processing)
         self._processors[i].start()
+    self.processing=True
 
   def stop(self):
     # for cam in self.cameras:
@@ -82,6 +92,10 @@ class AcquisitionGroup:
       child.stop()
     #del self.children
     self._processors = [None] * self.nChildren
+
+    self.processing=False
+    self.running=False
+    self.started=False
 
     if any(self.filepaths):
       rootpath = os.path.split(self.filepaths[0])[0]
