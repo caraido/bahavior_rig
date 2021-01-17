@@ -271,7 +271,6 @@ class AcquisitionObject:
   def sleep(self, last):
     pause_time = last + self.run_interval - time.time()
     if pause_time > 0:
-      print('sleeping for ', pause_time, ' seconds')
       time.sleep(pause_time)
 
   def display(self):
@@ -282,7 +281,8 @@ class AcquisitionObject:
 
     last_data_time = time.time()
     while True:
-      print('trying new frame')
+      # print('trying new frame')
+      print(data_count)
       if data_count > last_count:
         print('new frame')
         last_data_time = time.time()
@@ -292,11 +292,13 @@ class AcquisitionObject:
         Image.fromarray(data).save(frame_bytes, 'bmp')
         yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_bytes.getvalue() + b'\r\n')
       else:
+        print('sleeping for about ', self.run_interval, ' seconds (in display())')
         self.sleep(last_data_time)
       data, data_count = self.data_and_count
 
 
   def run(self):
+    print('started child run')
     if self._has_runner:
       return  # only 1 runner at a time
 

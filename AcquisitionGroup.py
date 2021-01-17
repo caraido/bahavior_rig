@@ -29,6 +29,8 @@ class AcquisitionGroup:
 
     self.pg = pg.ProcessingGroup()
 
+    print('done setting up ag. is camera 3 running? ', self.cameras[3].running)
+
   def start(self, filepaths=None, isDisplayed=True):
     self.filepaths = filepaths
     if not self.filepaths:
@@ -43,11 +45,11 @@ class AcquisitionGroup:
 
     for child, fp, disp in zip(self.children, self.filepaths[: -1], isDisplayed[: -1]):
       child.start(filepath=fp, display=disp)
-      print('starting camera ' + child.device_serial_number)
+      print('started camera ' + child.device_serial_number)
 
     # once the camera BeginAcquisition methods are called, we can start triggering
     self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
-    print('starting nidaq')
+    print('started nidaq')
 
     self.started= True
 
@@ -64,9 +66,13 @@ class AcquisitionGroup:
 
     # else:
     for i, child in enumerate(self.children):
+      print('child ', i)
       if self._runners[i] is None or not self._runners[i].is_alive():
+        print('was not alive')
         self._runners[i] = threading.Thread(target=child.run)
+        print('made thread object, starting')
         self._runners[i].start()
+        print('done starting')
     self.running=True
       #
       #       # if not self._runners[-1].is_alive():
@@ -97,7 +103,7 @@ class AcquisitionGroup:
     self.running=False
     self.started=False
 
-    if any(self.filepaths):
+    if self.filepaths is not None and any(self.filepaths):
       rootpath = os.path.split(self.filepaths[0])[0]
       self.pg(rootpath)
       self.post_analysis = threading.Thread(
