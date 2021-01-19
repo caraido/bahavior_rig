@@ -281,8 +281,6 @@ class AcquisitionObject:
 
     last_data_time = time.time()
     while True:
-      # print('trying new frame')
-      print(data_count)
       if data_count > last_count:
         print('new frame')
         last_data_time = time.time()
