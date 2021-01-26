@@ -156,9 +156,9 @@ class AcquisitionObject:
   def data_and_count(self):
     with self._data_lock:
       if self._data is None:
-        return None, 0
+        return None,0
       else:
-        return self._data.copy(), self._data_count
+        return self._data.copy(),self._data_count
 
   @property
   def new_data(self):
@@ -246,7 +246,7 @@ class AcquisitionObject:
 
   @process_rate.setter
   def process_rate(self, process_rate):
-    # self._process_interval = (1/process_rate) - BUFFER_TIME # division by zero error
+    #self._process_interval = (1/process_rate) - BUFFER_TIME # division by zero error
     self._process_interval = (1/(process_rate+0.000001)-BUFFER_TIME)
 
   @property
@@ -295,7 +295,9 @@ class AcquisitionObject:
   #       self.sleep(last_data_time)
   #     data, data_count = self.data_and_count
 
+
   def run(self):
+    print('started child run')
     if self._has_runner:
       return  # only 1 runner at a time
 

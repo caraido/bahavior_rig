@@ -23,7 +23,13 @@ class AcquisitionGroup:
     self._runners = [None] * self.nChildren
     self.filepaths = None
 
+    self.started=False
+    self.processing=False
+    self.running=False
+
     self.pg = pg.ProcessingGroup()
+
+    print('done setting up ag. is camera 3 running? ', self.cameras[3].running)
 
   def start(self, filepaths=None, isDisplayed=True):
     self.filepaths = filepaths
@@ -39,13 +45,16 @@ class AcquisitionGroup:
 
     for child, fp, disp in zip(self.children, self.filepaths[: -1], isDisplayed[: -1]):
       child.start(filepath=fp, display=disp)
-      print('starting camera ' + child.device_serial_number)
+      print('started camera ' + child.device_serial_number)
 
     # once the camera BeginAcquisition methods are called, we can start triggering
     self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
-    print('starting nidaq')
+    print('started nidaq')
+
+    self.started= True
 
   def run(self):
+    print('called ag.run')
     # begin gathering samples
     # if not self._runners:  # if self._runners == []
     #   for i, child in enumerate(self.children):
@@ -57,13 +66,19 @@ class AcquisitionGroup:
 
     # else:
     for i, child in enumerate(self.children):
+      print('child ', i)
       if self._runners[i] is None or not self._runners[i].is_alive():
+        print('was not alive')
         self._runners[i] = threading.Thread(target=child.run)
+        print('made thread object, starting')
         self._runners[i].start()
+        print('done starting')
+    self.running=True
       #
       #       # if not self._runners[-1].is_alive():
       #       #   self._runners[-1] = threading.Thread(target=self.nidaq.run)
       #   self._runners[-1].start()
+    print('finished ag.run')
 
   def process(self, i, options):
     # if it's recording, process() shouldn't be run. except dlc
@@ -73,6 +88,7 @@ class AcquisitionGroup:
         self._processors[i] = threading.Thread(
             target=self.children[i].run_processing)
         self._processors[i].start()
+    self.processing=True
 
   def stop(self):
     # for cam in self.cameras:
@@ -83,7 +99,11 @@ class AcquisitionGroup:
     #del self.children
     self._processors = [None] * self.nChildren
 
-    if any(self.filepaths):
+    self.processing=False
+    self.running=False
+    self.started=False
+
+    if self.filepaths is not None and any(self.filepaths):
       rootpath = os.path.split(self.filepaths[0])[0]
       self.pg(rootpath)
       self.post_analysis = threading.Thread(
