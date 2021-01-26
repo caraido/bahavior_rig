@@ -38,7 +38,7 @@ class Camera(AcquisitionObject):
     # self._ex_calibrating = False
 
   # TODO: make sure this step should be in prepare_display or prepare_run
-  def prepare_display(self):
+  def prepare_display(self): #TODO: prepare_run?
     self._spincam.BeginAcquisition()
 
   def end_display(self):
@@ -120,6 +120,9 @@ class Camera(AcquisitionObject):
         .output(filepath, vcodec='libx265') \
         .overwrite_output() \
         .run_async(pipe_stdin=True)
+        #TODO: save in new format
+        #also in audio?
+        #belongs in AcquisitionObject?
 
   def close_file(self, fileObj):
     fileObj.stdin.close()
@@ -171,6 +174,9 @@ class Camera(AcquisitionObject):
 
 
   def predisplay(self, frame):
+    #TODO: still get frame as input? but should return some kind of dictionary? or array?
+    #TODO: where does this get called from?
+
     # TODO: make sure text is not overlapping
     process = self.processing
 

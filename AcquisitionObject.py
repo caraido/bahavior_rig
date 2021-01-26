@@ -273,27 +273,27 @@ class AcquisitionObject:
     if pause_time > 0:
       time.sleep(pause_time)
 
-  def display(self):
-    frame_bytes = BytesIO()
-    last_count = 0
-    try:
-      data, data_count = self.data_and_count
-    except:
-      data = None
-    last_data_time = time.time()
+  # def display(self):
+  #   frame_bytes = BytesIO()
+  #   last_count = 0
+  #   try:
+  #     data, data_count = self.data_and_count
+  #   except:
+  #     data = None
+  #   last_data_time = time.time()
 
-    while data is not None:
-      if data_count > last_count:
-        last_data_time = time.time()
-        last_count = data_count
-        data = self.predisplay(data)  # do any additional frame workup
+  #   while data is not None:
+  #     if data_count > last_count:
+  #       last_data_time = time.time()
+  #       last_count = data_count
+  #       data = self.predisplay(data)  # do any additional frame workup
 
-        frame_bytes.seek(0)
-        Image.fromarray(data).save(frame_bytes, 'bmp')
-        yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_bytes.getvalue() + b'\r\n')
-      else:
-        self.sleep(last_data_time)
-      data, data_count = self.data_and_count
+  #       frame_bytes.seek(0)
+  #       Image.fromarray(data).save(frame_bytes, 'bmp')
+  #       yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_bytes.getvalue() + b'\r\n')
+  #     else:
+  #       self.sleep(last_data_time)
+  #     data, data_count = self.data_and_count
 
   def run(self):
     if self._has_runner:
