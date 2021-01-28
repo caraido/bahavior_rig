@@ -1,7 +1,7 @@
 import os
 import time
 
-saving_path_prefix = 'C:/Users/SchwartzLab'
+saving_path_prefix = r'C:\Users\SchwartzLab'
 default_saving_path= 'Desktop'
 default_folder_name = 'Testing'
 
@@ -19,7 +19,7 @@ def get_default_name():
 
 def change_default_path(input_path):
 	global default_saving_path
-	if os.path.exists(saving_path_prefix + '/' + default_saving_path):
+	if os.path.exists(os.path.join(saving_path_prefix , default_saving_path)):
 		default_saving_path = input_path
 		print('changed default saving path into: '+ input_path)
 	else:
@@ -73,6 +73,8 @@ def reformat_filepath(path,name,camera:list):
 		camera_filepath = os.path.join(full_path,'camera_' + serial_number+'.MOV')
 		filepaths.append(camera_filepath)
 	# TODO: change file name to match the root folder name
-	audio_filepath = os.path.join(full_path,'audio.tdms')
+	audio_filepath = os.path.join(full_path,'B&K_audio.tdms')
+	mic_filepath = os.path.join(full_path,'Dodo_audio.tdms')
 	filepaths.append(audio_filepath)
+	filepaths.append(mic_filepath)
 	return filepaths

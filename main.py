@@ -7,10 +7,10 @@ from utils import path_operation_utils as pop
 
 audio_settings = {
     'fs': 3e5,  # sample rate
-    'fMin': 200,
-    'fMax': 40000,
+    'fMin': 25000,
+    'fMax': 70000,
     'nFreq': 1e2,  # number of frequencies to plot
-    'fScale': 'log',  # frequency spacing, linear or log
+    'fScale': 'linear',  # frequency spacing, linear or log
     'window': .0032,  # length of window in seconds
     'overlap': .875,  # fractional overlap
     'correction': True,  # whether to correct for 1/f noise
@@ -51,10 +51,10 @@ def record_switch():
   #     ag.start(filepath = thisFilePath, display = True)
   #     ag.run()
 
-  # remove below
-  top_camera = [cam for cam in ag.cameras if cam.device_serial_number==top_camera_ID]
-  top_camera[0].saving_switch_on()
+  for cam in ag.cameras:
+      cam.saving_switch_on()
   ag.nidaq.saving_switch_on()
+  ag.mic.saving_switch=True
 
 
 def dlc_switch():
@@ -74,7 +74,7 @@ def ex_calibration_switch():
   # return Response(status=200)
 
 
-def in_calibration_switch():
+def in_calibration_top_switch():
   top_camera = [cam for cam in ag.cameras if cam.device_serial_number == top_camera_ID]
   result = top_camera[0].intrinsic_calibration_switch()
   # TODO: change mimetype to display on webpage based on the returned value type
@@ -84,6 +84,35 @@ def in_calibration_switch():
     data_type = 'multipart/x-mixed-replace; boundary=frame'
   return Response(result, mimetype=data_type)
 
+def in_calibration_A_switch():
+  side_cameras = [cam for cam in ag.cameras if cam.device_serial_number != top_camera_ID]
+  result = side_cameras[0].intrinsic_calibration_switch()
+  # TODO: change mimetype to display on webpage based on the returned value type
+  if isinstance(result, str):
+    data_type = 'text/html'
+  else:
+    data_type = 'multipart/x-mixed-replace; boundary=frame'
+  return Response(result, mimetype=data_type)
+
+def in_calibration_B_switch():
+  side_cameras = [cam for cam in ag.cameras if cam.device_serial_number != top_camera_ID]
+  result = side_cameras[1].intrinsic_calibration_switch()
+  # TODO: change mimetype to display on webpage based on the returned value type
+  if isinstance(result, str):
+    data_type = 'text/html'
+  else:
+    data_type = 'multipart/x-mixed-replace; boundary=frame'
+  return Response(result, mimetype=data_type)
+
+def in_calibration_C_switch():
+  side_cameras = [cam for cam in ag.cameras if cam.device_serial_number != top_camera_ID]
+  result = side_cameras[2].intrinsic_calibration_switch()
+  # TODO: change mimetype to display on webpage based on the returned value type
+  if isinstance(result, str):
+    data_type = 'text/html'
+  else:
+    data_type = 'multipart/x-mixed-replace; boundary=frame'
+  return Response(result, mimetype=data_type)
 
 def get_filepath():
   path = request.values['folderpath']
@@ -109,7 +138,10 @@ api_switch = {
     'trace': dlc_switch,
     'record': record_switch,
     'save and quit': ag.stop,
-    'intrinsic_calibration': in_calibration_switch,
+    'intrinsic_calibration_top': in_calibration_top_switch,
+    'intrinsic_calibration_A': in_calibration_A_switch,
+    'intrinsic_calibration_B': in_calibration_B_switch,
+    'intrinsic_calibration_C': in_calibration_C_switch,
     'extrinsic_calibration': ex_calibration_switch
 }
 
@@ -131,9 +163,9 @@ def generate_frame(cam_id):
   return Response(ag.cameras[cam_id].display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
-@app.route('/audio')
+@app.route('/Dodo_audio')
 def generate_spectrogram():
-  return Response(ag.nidaq.display(), mimetype='multipart/x-mixed-replace; boundary=frame')
+  return Response(ag.mic.display(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
 @app.route('/')

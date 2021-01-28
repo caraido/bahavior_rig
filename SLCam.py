@@ -19,9 +19,12 @@ import time
 import pandas as pd
 from dlclive import DLCLive, Processor
 from audio_processing import read_audio
+import pyaudio
+import nptdms
+import scipy.io.wavfile as wavfile
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
-
+CHUNK=1024
 
 class CharucoBoard:
   def __init__(self, x, y, marker_size=0.8,type=None):
@@ -822,13 +825,203 @@ class Nidaq:
         print('stopped nidaq')
       os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms_index')
       os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
-      # save .mat
 
+      # save .wav
       audio, _ = read_audio(self.filepath)
-      sio.savemat(self.filepath[:-4] + 'mat', {'audio': audio, 'sample_rate': self.sample_rate})
+      wavfile.write(self.filepath[:-4] + 'wav', self.sample_rate, audio)
+      #sio.savemat(self.filepath[:-4] + 'mat', {'audio': audio, 'sample_rate': self.sample_rate})
       print('save nidaq')
 
   def __del__(self):
+    self.stop()
+
+class Mic:
+  def __init__(self,audio_settings):
+    self.audio=None
+    self.data=None
+    self.index=None
+    self.stream=None
+    self._nBuffers=10
+
+    self.sample_rate = int(audio_settings['fs'])
+    self.duty_cycle=.01
+
+    self.read_rate=audio_settings['readRate']
+    self._read_size=self.sample_rate//self.read_rate
+    self.read_count = 0
+    self._running_lock=threading.Lock()
+
+    self._running=False
+    self._displaying=False
+    self._data_lock=threading.Lock()
+    self._saving=False
+    self.filepath=None
+
+    self.group_name = 'Dev1/ai2'
+    self.channel_name = 'channel_0'
+    self.saving_switch=False
+
+    self.channels=1
+    self.format = pyaudio.paFloat32
+
+    ## for display
+    self._nfft = int(audio_settings['nFreq'])
+    self._window = int(audio_settings['window'] * self.sample_rate)
+    self._overlap = int(audio_settings['overlap'] * self._window)
+    self._nx = int(np.floor(self.sample_rate - self._overlap) /
+                   (self._window - self._overlap))
+
+
+    # number of calculated timepoints
+    self._xq = np.linspace(0, 1, num=self._nx)
+
+    # number of frequency points
+    self._yq = np.linspace(0, int(self.sample_rate / 2), num=int(self._window / 2 + 1))
+
+    # we will use scip.interpolate to convert yq to zq
+    if audio_settings['fScale'] == 'linear':
+      self._zq = np.linspace(int(audio_settings['fMin']), int(audio_settings['fMax']), num=int(audio_settings['nFreq']))
+    else:
+      self._zq = np.logspace(int(np.log10(audio_settings['fMin'])), int(np.log10(audio_settings['fMax'])),
+                             num=int(audio_settings['nFreq']))
+
+    self._freq_correct = audio_settings['correction']
+
+    self._frame_bytes = BytesIO()
+
+  def capture(self,in_data, frame_count, time_info, status):
+    self.data = np.fromstring(in_data, dtype=np.float32)
+    if self.saving_switch:
+      data_chunk = nptdms.ChannelObject(self.group_name,
+                                        self.channel_name,
+                                        self.data,
+                                        properties={})
+      if self.filepath is not None:
+        with nptdms.TdmsWriter(self.filepath,'a') as writer:
+          writer.write_segment([data_chunk])
+
+    with self._data_lock:
+      self.read_count+=1
+    return (self.data, pyaudio.paContinue)
+
+  def start(self,filepath=None, display=True):
+    with self._running_lock:
+      if not self._running:
+        self.audio=pyaudio.PyAudio()
+        for devices in range(self.audio.get_device_count()):
+          info = self.audio.get_device_info_by_index(devices)
+          if 'UltraMic' in info['name']:
+            self.index = devices
+        if self.index is not None:
+          self.stream=self.audio.open(format=self.format,
+                          channels=self.channels,
+                          input_device_index=self.index,
+                          frames_per_buffer=self._read_size,
+                          rate=self.sample_rate,
+                          stream_callback=self.capture,
+                          input=True
+                          )
+        else:
+          raise ModuleNotFoundError("can't detect the desired mic!")
+
+        if display:
+          self._displaying=True
+        else:
+          self._displaying=False
+          self.data=None
+
+        self._saving=False
+        self.filepath=filepath
+        self._running=True
+
+
+  def run(self):
+    self.data = np.empty((self._read_size), dtype="float32")
+    self.stream.start_stream()
+    while self.stream.is_active():
+      time.sleep(BUFFER_TIME)
+      with self._running_lock:
+        if self._running:
+          with self._data_lock:
+            self.read_count+=1
+        else:
+          self.stream.stop_stream()
+          return
+
+  def display(self):
+    '''
+    Calculate the spectrogram of the data and send to connected browsers.
+    There are many ways to approach this, in particular by using wavelets or by using
+    overlapping FFTs. For now just trying non-overlapping FFTs ~ the simplest approach.
+    '''
+
+    flag = False
+    if self._displaying:
+      with self._data_lock:
+        read_count = max(self.read_count - 1, 0)
+
+      while self._displaying:
+
+        last = 0
+        # we will wait a bit less than the interval between frames
+        interval = (1 / self.read_rate) - BUFFER_TIME
+
+        pause_time = last + interval - time.time()
+        if pause_time > 0:
+          time.sleep(pause_time)
+
+        with self._data_lock:
+          if self.read_count > read_count:
+            # note that we're not guaranteed to be gathering sequential reads...
+
+            read_count = self.read_count
+            flag = True
+
+        if flag:
+          # we ought to extend the sampled data range so that the tails of the spectrogram are accurate with the desired overlap
+          # but as the number of windows increases, this probably becomes minor
+          size=(self.read_count-1) % self._nBuffers
+          _, _, spectrogram = signal.spectrogram(self.data, self.sample_rate, nperseg=self._window, noverlap=self._overlap)
+
+          # print(self._xq.shape, self._yq.shape, spectrogram.shape, self._zq.shape)
+          respect = interpolate.RectBivariateSpline(self._yq, self._xq, spectrogram)(self._zq, self._xq)
+
+          if self._freq_correct == True:
+            respect *= self._zq[:,np.newaxis]
+            #corrects for 1/f noise by multiplying with f
+
+          thisMin = np.amin(respect, axis=(0,1))
+          respect -= thisMin
+
+          thisMax = np.amax(respect, axis=(0,1))
+
+          respect /= thisMax #normalized to [0,1]
+
+          respect = mpl.cm.viridis(respect) * 255 #colormap
+
+          self._frame_bytes.seek(0)  # go to the beginning of the buffer
+          Image.fromarray(respect.astype(np.uint8)).save(self._frame_bytes, 'bmp')
+          yield b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n'
+
+          flag = False
+
+  def stop(self):
+    with self._running_lock:
+      if self._running:
+        self.stream.stop_stream()
+        self.stream.close()
+        self.audio.terminate()
+        self._running = False
+        self._displaying = False
+        self._saving = False
+
+      audio,_=read_audio(self.filepath)
+      #sio.savemat(self.filepath[:-4]+'mat',{'audio': audio, 'sample_rate': self.sample_rate})
+      wavfile.write(self.filepath[:-4]+'wav',self.sample_rate,audio)
+      print('save USB mic')
+
+
+  def _del__(self):
     self.stop()
 
 
@@ -840,28 +1033,32 @@ class AcquisitionGroup:
     self.cameras = [Camera(self._camlist, i, frame_rate)
                     for i in range(self.nCameras)]
     self.nidaq = Nidaq(frame_rate, audio_settings)
+    self.mic = Mic(audio_settings=audio_settings)
 
     self._runners = []
     self.filepaths = None
 
   def start(self, isDisplayed=True):
     if not self.filepaths:
-      self.filepaths = [None] * (self.nCameras + 1)
+      self.filepaths = [None] * (self.nCameras + 2)
     if not isDisplayed:
-      isDisplayed = [False] * (self.nCameras + 1)
+      isDisplayed = [False] * (self.nCameras + 2)
 
     if not isinstance(isDisplayed, list) or len(isDisplayed) == 1:
-      isDisplayed = [isDisplayed] * (self.nCameras + 1)
+      isDisplayed = [isDisplayed] * (self.nCameras + 2)
 
     print('detected %d cameras' % self.nCameras)
 
-    for cam, fp, disp in zip(self.cameras, self.filepaths[: -1], isDisplayed[: -1]):
+    for cam, fp, disp in zip(self.cameras, self.filepaths[: -2], isDisplayed[: -2]):
       cam.start(filepath=fp, display=disp)
       print('starting camera ' + cam.device_serial_number)
 
     # once the camera BeginAcquisition methods are called, we can start triggering
-    self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
+    self.nidaq.start(filepath=self.filepaths[-2],display=isDisplayed[-2])
     print('starting nidaq')
+
+    self.mic.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
+    print('starting ultramic')
 
   def run(self):
     # begin gathering samples
@@ -871,12 +1068,18 @@ class AcquisitionGroup:
         self._runners[i].start()
       self._runners.append(threading.Thread(target=self.nidaq.run))
       self._runners[-1].start()
+      self._runners.append(threading.Thread(target=self.mic.run))
+      self._runners[-1].start()
 
     else:
       for i, cam in enumerate(self.cameras):
         if not self._runners[i].is_alive():
           self._runners[i] = threading.Thread(target=cam.run)
           self._runners[i].start()
+
+      if not self._runners[-2].is_alive():
+        self._runners[-2] = threading.Thread(target=self.nidaq.run)
+        self._runners[-2].start()
 
       if not self._runners[-1].is_alive():
         self._runners[-1] = threading.Thread(target=self.nidaq.run)
@@ -886,6 +1089,7 @@ class AcquisitionGroup:
     for cam in self.cameras:
       cam.stop()
     self.nidaq.stop()  # make sure cameras are stopped before stopping triggers
+    self.mic.stop()
     # save .mat
     #audio = read_audio(self.filepaths[-1])
     #sio.savemat(self.filepaths[-1] + 'audio.mat', {'audio': audio, 'sample_rate': self.nidaq.sample_rate})
@@ -897,6 +1101,10 @@ class AcquisitionGroup:
     self._camlist.Clear()
     self._system.ReleaseInstance()
     del self.nidaq
+    del self.mic
+
+
+
 
 
 if __name__ == '__main__':
