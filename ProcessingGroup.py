@@ -119,7 +119,7 @@ class ProcessingGroup:
 		pass
 
 if __name__=='__main__':
-	rootpath =r'C:\Users\SchwartzLab\Desktop\2021-01-25_Testing(2)'
+	rootpath =r'C:\Users\SchwartzLab\Desktop\2021-01-26_Testing(4)'
 	dlcpath = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second_try-Devon-2020-12-07\exported-models\DLC_Alec_second_try_resnet_50_iteration-0_shuffle-1'
 	pg=ProcessingGroup()
 	pg(rootpath=rootpath,dlcpath=dlcpath)

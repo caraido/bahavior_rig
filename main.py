@@ -114,6 +114,18 @@ def in_calibration_C_switch():
     data_type = 'multipart/x-mixed-replace; boundary=frame'
   return Response(result, mimetype=data_type)
 
+def ex_3d_calibration_A_switch():
+    side_cameras = [cam for cam in ag.cameras if cam.device_serial_number != top_camera_ID]
+    ag.ex_3d_calibration_switch(side=side_cameras[0].device_serial_number,top=top_camera_ID)
+
+    return Response(status=200)
+
+def ex_3d_calibration_B_switch():
+    pass
+
+def ex_3d_calibration_C_switch():
+    pass
+
 def get_filepath():
   path = request.values['folderpath']
   name = request.values['foldername']
@@ -142,7 +154,8 @@ api_switch = {
     'intrinsic_calibration_A': in_calibration_A_switch,
     'intrinsic_calibration_B': in_calibration_B_switch,
     'intrinsic_calibration_C': in_calibration_C_switch,
-    'extrinsic_calibration': ex_calibration_switch
+    'extrinsic_calibration': ex_calibration_switch,
+    '3d_calibration_A':ex_3d_calibration_A_switch
 }
 
 

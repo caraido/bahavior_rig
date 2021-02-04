@@ -8,6 +8,7 @@ import matplotlib as mpl
 import ffmpeg
 import utils.calibration_utils as cau
 import utils.image_draw_utils as idu
+import utils.extrinsic as extrinsic
 import os
 import toml
 import threading
@@ -22,9 +23,11 @@ from audio_processing import read_audio
 import pyaudio
 import nptdms
 import scipy.io.wavfile as wavfile
+import pickle as pk
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 CHUNK=1024
+default_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig'
 
 class CharucoBoard:
   def __init__(self, x, y, marker_size=0.8,type=None):
@@ -65,7 +68,7 @@ class CharucoBoard:
   def default_dictionary(self, type):
     if type is None:
       self._default_dictionary = cv2.aruco.DICT_4X4_50
-    elif type == 'intrinsic':
+    elif type == 'intrinsic' or type == 'extrinsic_3d':
       self._default_dictionary = cv2.aruco.DICT_5X5_50
     elif type == 'extrinsic':
       self._default_dictionary = cv2.aruco.DICT_4X4_50
@@ -98,6 +101,11 @@ class Calib:
 
     self.allCorners = []
     self.allIds = []
+    # for 3d calibration
+    self.rvec=[]
+    self.tvec=[]
+    self.success=[]
+    self.rejectedImgPoints = []
     self.decimator = 0
     self.config = None
 
@@ -105,7 +113,6 @@ class Calib:
     self.board = self.charuco_board.board
 
     self.max_size = cau.get_expected_corners(self.board)
-    #self.save_path = './config/config_'+self.type+'_'
     self.load_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
 
   def _get_type(self, calib_type):
@@ -117,6 +124,10 @@ class Calib:
       self.type = calib_type
       self.x = 4
       self.y = 5
+    elif calib_type == 'extrinsic_3d':
+      self.type = calib_type
+      self.x = 3
+      self.y = 5
     else:
       raise ValueError("type can only be intrinsic or extrinsic!")
 
@@ -124,6 +135,10 @@ class Calib:
     del self.allIds, self.allCorners, self.decimator, self.config
     self.allCorners = []
     self.allIds = []
+    self.rvec = []
+    self.tvec = []
+    self.success = []
+    self.rejectedImgPoints=[]
     self.decimator = 0
     self.config = None
 
@@ -155,27 +170,49 @@ class Calib:
     else:
       self._root_config_path = None
 
-    # load configuration only for extrinsic calibration
-    def load_ex_config(self, camera_serial_number):
-      if not os.path.exists(self.load_path):
-        os.mkdir(self.load_path)
-        raise Warning("config directory doesn't exist. creating one...")
+  # load configuration only for extrinsic calibration
+  def load_ex_config(self, camera_serial_number):
+    items = os.listdir(self.load_path)
+    for item in items:
+      if camera_serial_number in item and self.type in item:
+        path = os.path.join(self.load_path, 'config_%s_%s.toml' % (self.type, camera_serial_number))
+        with open(path, 'r') as f:
+          # there only should be only one calib file for each camera
+          self.config = toml.load(f)
+          try:
+            self.config['ids'] = cau.reformat(self.config['ids'])
+            self.config['corners'] = cau.reformat(self.config['corners'])
+            markers = pd.DataFrame({'truecorners': list(self.config['corners'])},
+                                   index=list(self.config['ids']))
+            self.config['markers'] = markers
+          except ValueError:
+            print("Missing ids/corners/markers in the configuration file. Please check.")
 
-      items = os.listdir(self.load_path)
-      for item in items:
-        if camera_serial_number in item and self.type in item:
-          path = os.path.join(self.load_path, 'config_%s_%d.toml' % (self.type, camera_serial_number))
-          with open(path, 'r') as f:
-            # there only should be only one calib file for each camera
-            self.config = toml.load(f)
-            try:
-              self.config['ids'] = cau.reformat(self.config['ids'])
-              self.config['corners'] = cau.reformat(self.config['corners'])
-              markers = pd.DataFrame({'truecorners': list(self.config['corners'])},
-                                     index=list(self.config['ids']))
-              self.config['markers'] = markers
-            except ValueError:
-              print("Missing ids/corners/markers in the configuration file. Please check.")
+  # load intrinsic configuration only for 3d calibration
+  def load_in_config(self, camera_serial_number):
+    items = os.listdir(self.load_path)
+    for item in items:
+      if camera_serial_number in item and 'intrinsic' in item:
+        path = os.path.join(self.load_path, 'config_%s_%s.toml' % (self.type, camera_serial_number))
+        with open(path, 'r') as f:
+          # there only should be only one calib file for each camera
+          self.config = toml.load(f)
+
+  # check the existence of intrinsic calibration configuration for 3D calibration
+  def check_intrinsics(self,camera_serial_number):
+    items = os.listdir(self.load_path)
+    top=None
+    side = None
+
+    for i in items:
+      if camera_serial_number in i and 'intrinsic' in i:
+        side = os.path.join(self.load_path, i)
+      if '17391304' in i and 'intrinsic' in i:
+        top = os.path.join(self.load_path,i)
+    if top and side:
+      return top,side
+    else:
+      print('missing intrinsic calibration file for either top camera or side camera ')
 
 
   def save_config(self, camera_serial_number, width, height):
@@ -204,7 +241,7 @@ class Calib:
           return "intrinsic calibration configuration saved!"
         else:
           return "intrinsic calibration configuration NOT saved due to lack of markers."
-      else:
+      elif self.type=='extrinsic':
         if self.allIds is not None and not len(self.allIds) < self.max_size + 1:
           param = {'corners': np.array(self.allCorners),
                    'ids': np.array(self.allIds), 'CI': 5,
@@ -218,6 +255,23 @@ class Calib:
           return 'extrinsic calibration configuration saved!'
         else:
           return "failed to record all Ids! Can't save configuration. Please calibrate again."
+
+  def save_config_3d(self,camera_serial_number,param,error):
+    save_path = os.path.join(self.root_config_path, 'config_%s_%s.toml' % (self.type, camera_serial_number))
+    save_copy_path = os.path.join(self.load_path, 'config_%s_%s.toml' % (self.type, camera_serial_number))  # overwrite
+
+    if os.path.exists(save_path):
+      return 'Configuration file already exists.'
+    else:
+      if self.type=='extrinsic_3d':
+
+        param['error']=error
+        param['camera_serial_number']=camera_serial_number
+        with open(save_path, 'w') as f:
+          toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
+        with open(save_copy_path, 'w') as f:
+          toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
+
 
 
 class Camera:
@@ -238,6 +292,7 @@ class Camera:
     self.device_serial_number, self.height, self.width = self.get_camera_property()
     self.in_calib = Calib('intrinsic')
     self.ex_calib = Calib('extrinsic')
+    self.ex_3d_calib=Calib('extrinsic_3d')
 
     self._start = False
 
@@ -246,6 +301,7 @@ class Camera:
 
     self._saving = False
     self.file = None
+    self.filepath=None
 
     self._displaying = False
     self.frame = None
@@ -255,6 +311,8 @@ class Camera:
 
     self._in_calibrating = False
     self._ex_calibrating = False
+    self._ex_3d_calibrating=False
+    self.intrinsic_file=None
 
     self._dlc = False
     self._save_dlc = False
@@ -264,10 +322,12 @@ class Camera:
 
 
   def start(self, filepath=None, display=False):
+    self.filepath=filepath
     if filepath:
       rootpath = os.path.split(filepath)[0]
       self.in_calib.root_config_path=rootpath
       self.ex_calib.root_config_path=rootpath
+      self.ex_3d_calib.root_config_path=rootpath
       #self._saving = True
 
       # we will assume hevc for now
@@ -357,16 +417,23 @@ class Camera:
                   cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
 
     # check calibration status
-    if self._in_calibrating and self._ex_calibrating:
+    check1=self._in_calibrating and self._ex_calibrating
+    check2=self._in_calibrating and self._ex_3d_calibrating
+    check3=self._ex_calibrating and self._ex_3d_calibrating
+    if check1 or check2 or check3:
       raise Warning('Only one type of calibration can be turned on!')
 
     # intrinsic calibration
-    if self._in_calibrating and not self._ex_calibrating:
+    if self._in_calibrating and not self._ex_calibrating and not self._ex_3d_calibrating:
       self.intrinsic_calibration(frame)
 
     # extrinsic calibration
-    if self._ex_calibrating and not self._in_calibrating:
+    if self._ex_calibrating and not self._in_calibrating and not self._ex_3d_calibrating:
       self.extrinsic_calibration(frame)
+
+    # 3d extrinsic calibration
+    if self._ex_3d_calibrating and not self._in_calibrating and not self._ex_calibrating:
+      self.extrinsic_3d_calibration(frame)
 
     if self._dlc:
       if self._dlc_count:
@@ -420,14 +487,26 @@ class Camera:
         print('turning ON extrinsic calibration mode')
         self._ex_calibrating = True
         self.ex_calib.reset()
-        self.ex_calib.load_config(self.device_serial_number)
+        self.ex_calib.load_ex_config(self.device_serial_number)
       else:
         print('turning OFF extrinsic calibration mode')
         self._ex_calibrating = False
         self.ex_calib.save_config(self.device_serial_number,
                                   self.width,
                                   self.height)
-      return self.display()
+
+  def display(self):
+    if self._displaying:
+      with self._frame_lock:
+        frame_count = self.frame_count  # get the starting number of frames
+      while self._displaying:
+        with self._frame_lock:
+          if self.frame_count > frame_count:  # display the frame if it's new ~ might run into issues here?
+            frame_count = self.frame_count
+            self._frame_bytes.seek(0)  # go to the beginning of the buffer
+            Image.fromarray(self.frame).save(self._frame_bytes, 'bmp')
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
+
 
   def intrinsic_calibration(self, frame):
     # write something on the frame
@@ -456,17 +535,6 @@ class Camera:
 
     return frame
 
-  def display(self):
-    if self._displaying:
-      with self._frame_lock:
-        frame_count = self.frame_count  # get the starting number of frames
-      while self._displaying:
-        with self._frame_lock:
-          if self.frame_count > frame_count:  # display the frame if it's new ~ might run into issues here?
-            frame_count = self.frame_count
-            self._frame_bytes.seek(0)  # go to the beginning of the buffer
-            Image.fromarray(self.frame).save(self._frame_bytes, 'bmp')
-            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + self._frame_bytes.getvalue() + b'\r\n')
 
   def extrinsic_calibration(self, frame):
     # if there isn't configuration on the screen, save corners and ids
@@ -541,6 +609,25 @@ class Camera:
             cv2.putText(frame, text, (500, 1000),
                         cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
       self.ex_calib.decimator += 1
+
+
+  def extrinsic_3d_calibration(self,frame):
+    if self.ex_3d_calib.config is None:
+      text = 'Performing 3D extrinsic calibration... '
+      cv2.putText(frame, text, (50, 50),
+                  cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+
+      # detect corners
+      corners,ids=extrinsic.detect_aruco_2(frame, intrinsics=self.ex_3d_calib.config,params=self.ex_3d_calib.params,board=self.ex_3d_calib.board)
+
+      #success, result=extrinsic.estimate_pose_aruco(frame,self.intrinsic_file,self.ex_3d_calib.board)
+
+      self.ex_3d_calib.allCorners.append(corners)
+      self.ex_3d_calib.allIds.append(ids)
+      #self.ex_3d_calib.tvec.append(tvec)
+      #self.ex_3d_calib.rvec.append(rvec)
+      #self.ex_3d_calib.success.append(success)
+
 
   def run(self):
     flag = False
@@ -823,14 +910,15 @@ class Nidaq:
         self._displaying = False
         self._saving = False
         print('stopped nidaq')
-      os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms_index')
-      os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
-
-      # save .wav
-      audio, _ = read_audio(self.filepath)
-      wavfile.write(self.filepath[:-4] + 'wav', self.sample_rate, audio)
-      #sio.savemat(self.filepath[:-4] + 'mat', {'audio': audio, 'sample_rate': self.sample_rate})
-      print('save nidaq')
+      try:
+        os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms_index')
+        os.remove('C:\\Users\\SchwartzLab\\Desktop\\unwanted.tdms')
+      finally:
+        # save .wav
+        audio, _ = read_audio(self.filepath)
+        wavfile.write(self.filepath[:-4] + 'wav', self.sample_rate, audio)
+        #sio.savemat(self.filepath[:-4] + 'mat', {'audio': audio, 'sample_rate': self.sample_rate})
+        print('save nidaq')
 
   def __del__(self):
     self.stop()
@@ -1059,6 +1147,40 @@ class AcquisitionGroup:
 
     self.mic.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
     print('starting ultramic')
+
+  def ex_3d_calibration_switch(self, side, top='17391304'):
+    side_cam=None
+    top_cam=None
+    for cam in self.cameras:
+      if cam.device_serial_number==side:
+        side_cam=cam
+      if cam.device_serial_number==top:
+        top_cam=cam
+
+    if side_cam and top_cam and side_cam.ex_3d_calib.check_intrinsics(side):
+      top_intrinsic, side_intrinsic = side_cam.ex_3d_calib.check_intrinsics(side)
+      top_cam.intrinsic_file = toml.load(top_intrinsic)
+      side_cam.intrinsic_file = toml.load(side_intrinsic)
+      intrinsic_file=[top_cam.intrinsic_file,side_cam.intrinsic_file]
+      if not side_cam._ex_3d_calibrating and not top_cam._ex_3d_calibrating:
+        print('turning ON 3D extrinsic calibration mode')
+        side_cam._ex_3d_calibrating = True
+        top_cam._ex_3d_calibrating = True
+      else:
+        side_cam._ex_3d_calibrating = False
+        top_cam._ex_3d_calibrating = False
+        cam_indices=[0,1]
+        ids=[top_cam.ex_3d_calib.allIds,side_cam.ex_3d_calib.allIds]
+        corner = [top_cam.ex_3d_calib.allCorners, side_cam.ex_3d_calib.allCorners]
+        extrinsic_param,error=extrinsic.get_extrinsics_2(cam_indices,
+                                                   ids_list=ids,
+                                                   corners_list=corner,
+                                                   intrinsics_list=intrinsic_file,
+                                                   cam_align=0,# top camera
+                                                   board=top_cam.ex_3d_calib.board, skip=40)
+        side_cam.ex_3d_calib.save_config_3d(side,extrinsic_param,error)
+        print('3d camera calibration finished on %s and %s'%(top,side))
+        top_cam.ex_3d_calib.reset()
 
   def run(self):
     # begin gathering samples
