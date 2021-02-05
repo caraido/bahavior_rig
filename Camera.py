@@ -43,11 +43,17 @@ class Camera(AcquisitionObject):
       path = os.path.join(self.temp_file,'camera_'+self.device_serial_number)
       if not os.path.exists(path):
         os.mkdir(path)
+      else:
+        os.remove(path)
+        os.mkdir(path)
       self.file=os.path.join(path,'stream.m3u8')
       self._has_filepath=False
     else:
       path = os.path.join(filepath,'camera_'+self.device_serial_number)
       if not os.path.exists(path):
+        os.mkdir(path)
+      else:
+        os.remove(path)
         os.mkdir(path)
       self.file=os.path.join(path,'stream.m3u8')
       self._has_filepath=True
@@ -57,10 +63,10 @@ class Camera(AcquisitionObject):
     self.running = True
 
   # TODO: make sure this step should be in prepare_display or prepare_run
-  def prepare_display(self): #TODO: prepare_run?
+  def prepare_run(self): #TODO: prepare_run?
     self._spincam.BeginAcquisition()
 
-  def end_display(self):
+  def end_run(self):
     self._spincam.EndAcquisition()
 
   def prepare_processing(self, options):

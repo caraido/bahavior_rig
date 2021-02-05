@@ -83,6 +83,9 @@ class Nidaq(AcquisitionObject):
     path = os.path.join(self.temp_filepath, 'spectrogram')
     if not os.path.exists(path):
       os.mkdir(path)
+    else:
+      os.remove(path)
+      os.mkdir(path)
     self.temp_file = os.path.join(path, 'stream.m3u8')
 
     if filepath is None:
