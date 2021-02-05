@@ -8,6 +8,7 @@ import os
 import time
 from io import BytesIO
 import ffmpeg
+# import RigStatus
 
 AUDIO_INPUT_CHANNEL = 'Dev1/ai1'
 AUDIO_INPUT_GAIN = 1e4
@@ -17,11 +18,16 @@ TRIGGER_OUTPUT_CHANNEL = 'Dev1/ctr0'
 
 
 class Nidaq(AcquisitionObject):
-  def __init__(self, frame_rate, audio_settings):
-    self.parse_settings(audio_settings)
+  # def __init__(self, frame_rate, audio_settings):
+    # Nidaq(status['frame_rate'].current, status['sample frequency'].current,
+    #  status['read rate'].current, status['spectrogram'].current)
+  def __init__(self, frame_rate, sample_rate, read_rate, spectrogram_settings):
+    self.sample_rate = int(sample_rate)
 
     AcquisitionObject.__init__(
-        self, self.run_rate, (int(self.sample_rate // self.run_rate), 1))
+        self, read_rate, (int(self.sample_rate // read_rate), 1))
+
+    self.parse_settings(spectrogram_settings)
 
     # TODO: verify that we are not violating the task state model: https://zone.ni.com/reference/en-XX/help/370466AH-01/mxcncpts/taskstatemodel/
     # specifically, if we change logging mode, do we need to re-commit the task??
@@ -55,12 +61,12 @@ class Nidaq(AcquisitionObject):
     self._log_mode = [False, False]  # [isLogging, isDisplaying]
     self._filepath = ''
 
-  def parse_settings(self, audio_settings):
-    self.sample_rate = int(audio_settings['fs'])
-    self.run_rate = audio_settings['readRate']
-    self._nfft = int(audio_settings['nFreq'])
-    self._window = int(audio_settings['window'] * self.sample_rate)
-    self._overlap = int(audio_settings['overlap'] * self._window)
+  def parse_settings(self, spectrogram_settings):
+    self._nfft = int(spectrogram_settings['frequency resolution'].current)
+    self._window = int(
+        spectrogram_settings['pixel duration'].current * self.sample_rate)
+    self._overlap = int(
+        spectrogram_settings['pixel fractional overlap'].current * self._window)
 
     _, _, spectrogram = signal.spectrogram(
         np.zeros((int(self.sample_rate // self.run_rate),)), self.sample_rate, nperseg=self._window, noverlap=self._overlap)
@@ -70,14 +76,14 @@ class Nidaq(AcquisitionObject):
     self._xq = np.linspace(0, 1, num=self._nx)
     self._yq = np.linspace(0, int(self.sample_rate/2),
                            num=int(self._window/2 + 1))
-    if audio_settings['fScale'] == 'linear':
-      self._zq = np.linspace(int(audio_settings['fMin']), int(
-          audio_settings['fMax']), num=int(audio_settings['nFreq']))
+    if spectrogram_settings['log scaling']:
+      self._zq = np.logspace(int(np.log10(spectrogram_settings['minimum frequency'])), int(
+          np.log10(spectrogram_settings['maximum frequency'])), num=int(spectrogram_settings['frequency resolution']))
     else:
-      self._zq = np.logspace(int(np.log10(audio_settings['fMin'])), int(
-          np.log10(audio_settings['fMax'])), num=int(audio_settings['nFreq']))
+      self._zq = np.linspace(int(spectrogram_settings['minimum frequency']), int(
+          spectrogram_settings['maximum frequency']), num=int(spectrogram_settings['frequency resolution']))
 
-    self._freq_correct = audio_settings['correction']
+    self._freq_correct = spectrogram_settings['noise correction']
 
   def start(self, filepath=None, display=False):
     path = os.path.join(self.temp_filepath, 'spectrogram')
@@ -176,7 +182,7 @@ class Nidaq(AcquisitionObject):
     _, _, spectrogram = signal.spectrogram(
         data[:, 0], self.sample_rate, nperseg=self._window, noverlap=self._overlap)
 
-    print(self._xq.shape, self._yq.shape, spectrogram.shape, self._zq.shape)
+    # print(self._xq.shape, self._yq.shape, spectrogram.shape, self._zq.shape)
     interpSpect = interpolate.RectBivariateSpline(
         self._yq, self._xq, spectrogram)(self._zq, self._xq)  # TODO: try linear instead of spline, univariate instead of bivariate
 
