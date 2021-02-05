@@ -169,7 +169,7 @@ class Nidaq(AcquisitionObject):
     _, _, spectrogram = signal.spectrogram(
         data[:, 0], self.sample_rate, nperseg=self._window, noverlap=self._overlap)
 
-    # print(self._xq.shape, self._yq.shape, spectrogram.shape, self._zq.shape)
+    print(self._xq.shape, self._yq.shape, spectrogram.shape, self._zq.shape)
     interpSpect = interpolate.RectBivariateSpline(
         self._yq, self._xq, spectrogram)(self._zq, self._xq)  # TODO: try linear instead of spline, univariate instead of bivariate
 
