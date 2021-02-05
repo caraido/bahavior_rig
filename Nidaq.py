@@ -24,10 +24,10 @@ class Nidaq(AcquisitionObject):
   def __init__(self, frame_rate, sample_rate, read_rate, spectrogram_settings):
     self.sample_rate = int(sample_rate)
 
+    self.parse_settings(spectrogram_settings)
+
     AcquisitionObject.__init__(
         self, read_rate, (int(self.sample_rate // read_rate), 1))
-
-    self.parse_settings(spectrogram_settings)
 
     # TODO: verify that we are not violating the task state model: https://zone.ni.com/reference/en-XX/help/370466AH-01/mxcncpts/taskstatemodel/
     # specifically, if we change logging mode, do we need to re-commit the task??
@@ -118,6 +118,7 @@ class Nidaq(AcquisitionObject):
     # stream starts at a ~4sec delay
     # but tends to catch up to a little over 1sec delay
 
+    # TODO: if _nx or _nfft change, we need to close and reopen file!!
     file = (ffmpeg
             .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self._nx}x{self._nfft}', framerate=self.run_rate)
             .output(fileObj,
