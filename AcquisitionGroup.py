@@ -15,9 +15,9 @@ class AcquisitionGroup:
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
     self.nCameras = self._camlist.GetSize()
-    self.cameras = [Camera(self._camlist, i, status['frame rate'])
+    self.cameras = [Camera(self._camlist, i, status['frame rate'].current)
                     for i in range(self.nCameras)]
-    self.nidaq = Nidaq(status['frame_rate'].current, status['sample frequency'].current,
+    self.nidaq = Nidaq(status['frame rate'].current, status['sample frequency'].current,
                        status['read rate'].current, status['spectrogram'].current)
     self.children = self.cameras + [self.nidaq]
     self.nChildren = self.nCameras + 1
