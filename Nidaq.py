@@ -106,7 +106,7 @@ class Nidaq(AcquisitionObject):
     # but tends to catch up to a little over 1sec delay
 
     file = (ffmpeg
-            .input('pipe:', format='rawvideo', pix_fmt='gray', s='1280x1024', framerate=self.run_rate)
+            .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self._nx}x{self._nfft}', framerate=self.run_rate)
             .output(fileObj,
                     format='hls', hls_time=split_time,
                     hls_playlist_type='event', hls_flags='omit_endlist',
