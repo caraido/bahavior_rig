@@ -62,7 +62,7 @@ class Nidaq(AcquisitionObject):
     self._window = int(audio_settings['window'] * self.sample_rate)
     self._overlap = int(audio_settings['overlap'] * self._window)
     self._nx = int(np.floor(self.sample_rate-self._overlap) /
-                   (self._window-self._overlap))
+                   (self._window-self._overlap) / self.run_rate)
     self._xq = np.linspace(0, 1, num=self._nx)
     self._yq = np.linspace(0, int(self.sample_rate/2),
                            num=int(self._window/2 + 1))
