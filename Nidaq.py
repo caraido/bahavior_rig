@@ -61,8 +61,12 @@ class Nidaq(AcquisitionObject):
     self._nfft = int(audio_settings['nFreq'])
     self._window = int(audio_settings['window'] * self.sample_rate)
     self._overlap = int(audio_settings['overlap'] * self._window)
-    self._nx = int(np.round(np.floor(self.sample_rate-self._overlap) /
-                            (self._window-self._overlap) / self.run_rate))
+
+    _, _, spectrogram = signal.spectrogram(
+        np.zeros((int(self.sample_rate // self.run_rate), 1)), self.sample_rate, nperseg=self._window, noverlap=self._overlap)
+    self._nx = spectrogram.shape[1]
+    # self._nx = int(np.round(np.floor(self.sample_rate-self._overlap) /
+    #                         (self._window-self._overlap) / self.run_rate))
     self._xq = np.linspace(0, 1, num=self._nx)
     self._yq = np.linspace(0, int(self.sample_rate/2),
                            num=int(self._window/2 + 1))
