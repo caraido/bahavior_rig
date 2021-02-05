@@ -44,7 +44,7 @@ class Camera(AcquisitionObject):
       if not os.path.exists(path):
         os.mkdir(path)
       else:
-        os.remove(path)
+        self.rmdir(path)
         os.mkdir(path)
       self.file=os.path.join(path,'stream.m3u8')
       self._has_filepath=False
@@ -53,7 +53,7 @@ class Camera(AcquisitionObject):
       if not os.path.exists(path):
         os.mkdir(path)
       else:
-        os.remove(path)
+        self.rmdir(path)
         os.mkdir(path)
       self.file=os.path.join(path,'stream.m3u8')
       self._has_filepath=True

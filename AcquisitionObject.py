@@ -405,6 +405,15 @@ class AcquisitionObject:
       # buffer the current data
       self.results = results
 
+  def rmdir(self, path):
+    # print('rming from acq obj')
+    for root,dirs,files in os.walk(path, topdown=False):
+      for name in files:
+        os.remove(os.path.join(root, name))
+      for name in dirs:
+        os.rmdir(os.path.join(root,name))
+    os.rmdir(path)
+
   def __del__(self):
     self.stop()
     while self._has_runner or self._has_processor:

@@ -37,7 +37,7 @@ class RigStatusItem:
   def __call__(self, state):
     # TODO: check that state is allowed and parseable!
     if not self._mutable:
-      raise 'Couldn\'t set status'
+      raise Exception('Couldn\'t set status')
 
     if type(self._current) is dict:
       current = self._current.copy()

@@ -91,7 +91,7 @@ class Nidaq(AcquisitionObject):
     if not os.path.exists(path):
       os.mkdir(path)
     else:
-      os.remove(path)
+      self.rmdir(path)
       os.mkdir(path)
     self.temp_file = os.path.join(path, 'stream.m3u8')
 
