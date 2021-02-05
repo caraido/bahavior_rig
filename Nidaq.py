@@ -4,7 +4,8 @@ import matplotlib as mpl
 import nidaqmx
 from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 from AcquisitionObject import AcquisitionObject
-import os,time
+import os
+import time
 from io import BytesIO
 import ffmpeg
 
@@ -85,7 +86,7 @@ class Nidaq(AcquisitionObject):
     else:
       self._has_filepath = True
 
-    self.file=filepath
+    self.file = filepath
     self.data = display
     self.running = True
 
@@ -114,7 +115,8 @@ class Nidaq(AcquisitionObject):
             .overwrite_output()
             # .run_async(pipe_stdin=True)
             .global_args('-loglevel', 'error')
-            .run_async(pipe_stdin=True, quiet=True)  # bug~need low logs if quiet
+            # bug~need low logs if quiet
+            .run_async(pipe_stdin=True, quiet=True)
             )
     return file
 
@@ -152,7 +154,7 @@ class Nidaq(AcquisitionObject):
   def capture(self, data):
     while True:
       self._audio_reader.read_many_sample(
-          data[:,0],
+          data[:, 0],
           number_of_samples_per_channel=self.data_size[0]
       )
       yield data
@@ -165,7 +167,7 @@ class Nidaq(AcquisitionObject):
     '''
 
     _, _, spectrogram = signal.spectrogram(
-        data[:,0], self.sample_rate, nperseg=self._window, noverlap=self._overlap)
+        data[:, 0], self.sample_rate, nperseg=self._window, noverlap=self._overlap)
 
     # print(self._xq.shape, self._yq.shape, spectrogram.shape, self._zq.shape)
     interpSpect = interpolate.RectBivariateSpline(
@@ -182,7 +184,8 @@ class Nidaq(AcquisitionObject):
 
     interpSpect /= thisMax  # normalized to [0,1]
 
-    interpSpect = mpl.cm.viridis(interpSpect) * 255  # colormap
+    # interpSpect = mpl.cm.viridis(interpSpect) * 255  # colormap
+    interpSpect = interpSpect * 255  # TODO: decide how to handle colormapping?
     return interpSpect.astype(np.uint8)
 
   def run(self):
