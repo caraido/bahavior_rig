@@ -77,14 +77,14 @@ class Nidaq(AcquisitionObject):
     self._xq = np.linspace(0, 1, num=self._nx)
     self._yq = np.linspace(0, int(self.sample_rate/2),
                            num=int(self._window/2 + 1))
-    if spectrogram_settings['log scaling']:
-      self._zq = np.logspace(int(np.log10(spectrogram_settings['minimum frequency'])), int(
-          np.log10(spectrogram_settings['maximum frequency'])), num=int(spectrogram_settings['frequency resolution']))
+    if spectrogram_settings['log scaling'].current:
+      self._zq = np.logspace(int(np.log10(spectrogram_settings['minimum frequency'].current)), int(
+          np.log10(spectrogram_settings['maximum frequency'].current)), num=int(spectrogram_settings['frequency resolution'].current))
     else:
-      self._zq = np.linspace(int(spectrogram_settings['minimum frequency']), int(
-          spectrogram_settings['maximum frequency']), num=int(spectrogram_settings['frequency resolution']))
+      self._zq = np.linspace(int(spectrogram_settings['minimum frequency'].current), int(
+          spectrogram_settings['maximum frequency'].current), num=int(spectrogram_settings['frequency resolution'].current))
 
-    self._freq_correct = spectrogram_settings['noise correction']
+    self._freq_correct = spectrogram_settings['noise correction'].current
 
   def start(self, filepath=None, display=False):
     path = os.path.join(self.temp_filepath, 'spectrogram')
