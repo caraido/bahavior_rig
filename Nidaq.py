@@ -4,6 +4,9 @@ import matplotlib as mpl
 import nidaqmx
 from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 from AcquisitionObject import AcquisitionObject
+import os,time
+from io import BytesIO
+import ffmpeg
 
 AUDIO_INPUT_CHANNEL = 'Dev1/ai1'
 AUDIO_INPUT_GAIN = 1e4
@@ -71,10 +74,54 @@ class Nidaq(AcquisitionObject):
 
     self._freq_correct = audio_settings['correction']
 
+  def start(self, filepath=None, display=False):
+    path = os.path.join(self.temp_filepath, 'spectrogram')
+    if not os.path.exists(path):
+      os.mkdir(path)
+    self.temp_file = os.path.join(path, 'stream.m3u8')
+
+    if filepath is None:
+      self._has_filepath = False
+    else:
+      self._has_filepath = True
+
+    self.file=filepath
+    self.data = display
+    self.running = True
+
   def open_file(self, fileObj):
     self._log_mode[0] = True
     self._filepath = fileObj
     return fileObj
+
+  def open_temp_file(self, fileObj):
+
+    # filepath should be somethings like 'video{cam_id}_stream/stream.m3u8'
+    split_time = 1.0  # in seconds, duration of each file
+    # NOTE: tried split_time = 0.25, 0.5. Seems like video gets choppier and latency worsens
+    # probably due to needing to fetch more files
+    # optimum seems to be near 1
+    # stream starts at a ~4sec delay
+    # but tends to catch up to a little over 1sec delay
+
+    file = (ffmpeg
+            .input('pipe:', format='rawvideo', pix_fmt='gray', s='1280x1024', framerate=self.run_rate)
+            .output(fileObj,
+                    format='hls', hls_time=split_time,
+                    hls_playlist_type='event', hls_flags='omit_endlist',
+                    g=int(self.run_rate * split_time), sc_threshold=0, vcodec='h264',
+                    tune='zerolatency', preset='ultrafast')
+            .overwrite_output()
+            # .run_async(pipe_stdin=True)
+            .global_args('-loglevel', 'error')
+            .run_async(pipe_stdin=True, quiet=True)  # bug~need low logs if quiet
+            )
+    return file
+
+  def close_temp_file(self, fileObj):
+    fileObj.stdin.close()
+    fileObj.wait()
+    del fileObj
 
   def prepare_display(self):
     self._log_mode[1] = True
@@ -118,7 +165,7 @@ class Nidaq(AcquisitionObject):
     '''
 
     _, _, spectrogram = signal.spectrogram(
-        data, self.sample_rate, nperseg=self._window, noverlap=self._overlap)
+        data[:,0], self.sample_rate, nperseg=self._window, noverlap=self._overlap)
 
     # print(self._xq.shape, self._yq.shape, spectrogram.shape, self._zq.shape)
     interpSpect = interpolate.RectBivariateSpline(
@@ -138,9 +185,46 @@ class Nidaq(AcquisitionObject):
     interpSpect = mpl.cm.viridis(interpSpect) * 255  # colormap
     return interpSpect.astype(np.uint8)
 
+  def run(self):
+    print('started child run')
+    if self._has_runner:
+      return  # only 1 runner at a time
+
+    self._has_runner = True
+    data = self.new_data
+    capture = self.capture(data)
+    data_time = time.time() - self.run_interval
+
+    while True:
+      self.sleep(data_time)
+
+      with self._running_lock:
+        # try to capture the next data segment
+        if self._running:
+          data_time = time.time()
+          data = next(capture)
+        else:
+          self._has_runner = False
+          return
+
+      # save the current data
+      with self._file_lock:
+        if self._file is not None:
+          self.save(data)
+
+      # save the spectrogram to temp
+      with self._temp_file_lock:
+        if self._temp_file is not None:
+          spectrogram = self.predisplay(data)
+          self._temp_file.stdin.write(spectrogram.tobytes())
+
+      # buffer the current data
+      self.data = data
+
   def end_run(self):
     self.audio_task.stop()
     self.trigger_task.stop()
+    os.remove(os.path.split(self.temp_filepath)[0])
 
   def end_display(self):
     self._log_mode[1] = True

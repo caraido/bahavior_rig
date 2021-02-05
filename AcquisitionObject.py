@@ -3,9 +3,10 @@ from io import BytesIO
 from PIL import Image
 import time
 import numpy as np
+import os
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
-
+TEMP_FILE=r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\temp_frames'
 
 class AcquisitionObject:
   #############
@@ -13,6 +14,11 @@ class AcquisitionObject:
   #############
 
   def open_file(self, fileObj):
+    # anything that needs to be done to open a save file for this class
+    # file object is just whatever you want to pass to close_file() later on, but cannot be None
+    return fileObj
+
+  def open_temp_file(self, fileObj):
     # anything that needs to be done to open a save file for this class
     # file object is just whatever you want to pass to close_file() later on, but cannot be None
     return fileObj
@@ -67,6 +73,11 @@ class AcquisitionObject:
     # fileObj is just whatever gets passed from save_file()
     pass
 
+  def close_temp_file(self, fileObj):
+    # anything that needs to be done to close a save file for this class
+    # fileObj is just whatever gets passed from save_file()
+    pass
+
   def end_processing(self, process):
     # tear down the process
     pass
@@ -88,6 +99,9 @@ class AcquisitionObject:
     self._file_lock = threading.Lock()
     self._file = None
 
+    self._temp_file_lock=threading.Lock()
+    self._temp_file=None
+
     self._data_lock = threading.Lock()
     self._data = None
 
@@ -100,6 +114,13 @@ class AcquisitionObject:
 
     self._has_runner = False
     self._has_processor = False
+    self._has_filepath=False
+
+    self.preview=False
+
+    self.filepath=None
+    self.temp_filepath=TEMP_FILE
+    self.temp_file=TEMP_FILE
 
   @property
   def running(self):
@@ -138,6 +159,26 @@ class AcquisitionObject:
           self.close_file(self._file)
           del self._file
           self._file = None
+
+  @property
+  def temp_file(self):
+    with self._temp_file_lock:
+      return self._temp_file
+
+  @temp_file.setter
+  def temp_file(self, temp_file):
+    if temp_file is not None:
+      with self._temp_file_lock:
+        if self._temp_file is not None:
+          self.close_temp_file(self._temp_file)
+
+        self._temp_file = self.open_temp_file(temp_file)
+    else:
+      with self._temp_file_lock:
+        if self._temp_file is not None:
+          self.close_temp_file(self._temp_file)
+          del self._temp_file
+          self._temp_file = None
 
   @property
   def data(self):
@@ -258,13 +299,15 @@ class AcquisitionObject:
     self._data_size = data_size
 
   def start(self, filepath=None, display=False):
-    self.file = filepath
+    self.filepath=filepath
+    self.file=filepath
     self.data = display
     self.running = True
 
   def stop(self):
     self.running = False
     self.file = None
+    self.temp_file=None
     self.data = False
     self.processing = None
 
@@ -317,7 +360,7 @@ class AcquisitionObject:
           self._has_runner = False
           return
 
-      # save the current data
+      # save the current data to temp
       with self._file_lock:
         if self._file is not None:
           self.save(data)

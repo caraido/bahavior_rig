@@ -5,7 +5,7 @@ audio_settings = {
     'nFreq': 1e2,  # number of frequencies to plot
     'fScale': 'log',  # frequency spacing, linear or log
     'window': .0032,  # length of window in seconds ~ this is 960 -> 1024?
-    'overlap': .875,  # fractional overlap
+    'overlap': .675,  # fractional overlap
     'correction': True,  # whether to correct for 1/f noise
     'readRate': 1,  # how frequently to read data from the Daq's off-board data buffer
     # TODO: rename readRate to readPeriod

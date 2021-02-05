@@ -3,7 +3,7 @@ from flask import Flask, Response, render_template, request, redirect, url_for
 from utils import path_operation_utils as pop
 from utils.audio_settings import audio_settings
 from flask_socketio import SocketIO, emit
-import behavior_gui.testDefs as testDefs
+#import behavior_gui.initialStatus as testDefs
 import eventlet
 from threading import Thread
 

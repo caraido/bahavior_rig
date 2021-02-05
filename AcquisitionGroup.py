@@ -8,6 +8,7 @@ from Nidaq import Nidaq
 import ProcessingGroup as pg
 
 
+
 class AcquisitionGroup:
   def __init__(self, frame_rate=30, audio_settings=None):
     self._system = PySpin.System.GetInstance()
@@ -131,7 +132,7 @@ if __name__ == '__main__':
   # preview
   ag.start()
   ag.run()
-  ag.cameras[0].display()
+
   ag.stop()
 
   # dlc
