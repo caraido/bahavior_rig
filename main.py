@@ -7,14 +7,15 @@ from flask_socketio import SocketIO, emit
 import eventlet
 from threading import Thread
 
-eventlet.monkey_patch()
-bgthread=Thread()
+# eventlet.monkey_patch()
+# bgthread=Thread()
 
 
 app = Flask(__name__)
-socketio=SocketIO(app,cors_allows_origin='*',async_mode='eventlet')
+socketio = SocketIO(app, cors_allows_origin='*', async_mode='eventlet')
 
-ag = AcquisitionGroup.AcquisitionGroup(frame_rate=30, audio_settings=audio_settings)
+ag = AcquisitionGroup.AcquisitionGroup(
+    frame_rate=30, audio_settings=audio_settings)
 ag.start(isDisplayed=True)
 # default filepath
 # filepath = ['C:\\Users\\SchwartzLab\\Desktop\\Testing_Female2Record.mov',
@@ -26,28 +27,28 @@ model_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\DLC\Alec_second
 
 save_path = None
 
+
 def record_switch():
   # TODO: change to below
   if ag.filepaths is not None:
-     ag.stop()
-     ag.start(filepaths=None, isDisplayed=True)
-     ag.run()
+    ag.stop()
+    ag.start(filepaths=None, isDisplayed=True)
+    ag.run()
   else:
-     ag.stop()
-     ag.start(filepaths=save_path, isDisplayed=True)
-     ag.run()
+    ag.stop()
+    ag.start(filepaths=save_path, isDisplayed=True)
+    ag.run()
 
   # remove below
-  #ag.cameras[0].saving_switch_on()
-  #ag.nidaq.saving_switch_on()
+  # ag.cameras[0].saving_switch_on()
+  # ag.nidaq.saving_switch_on()
 
 
 def dlc_switch():
-    if ag.started and not ag.processing and ag.filepaths is not None:
-        ag.process(i=0,options={'mode': 'DLC', 'modelpath': model_path})
-    if ag.started and ag.processing:
-        ag.stop()
-
+  if ag.started and not ag.processing and ag.filepaths is not None:
+    ag.process(i=0, options={'mode': 'DLC', 'modelpath': model_path})
+  if ag.started and ag.processing:
+    ag.stop()
 
 
 def ex_calibration_switch():
@@ -81,7 +82,7 @@ def get_filepath():
   path = pop.reformat_filepath(path, name, camera_list)
   #ag.filepaths = path
   global save_path
-  save_path=path
+  save_path = path
   return Response(status=200)
 
 # def get_current_settings():
@@ -93,7 +94,7 @@ def get_filepath():
 
 api_switch = {
     'confirm and submit': get_filepath,
-    #'start': lambda: ag.start(isDisplayed=True),
+    # 'start': lambda: ag.start(isDisplayed=True),
     'trace': dlc_switch,
     'record': record_switch,
     'save and quit': ag.stop,

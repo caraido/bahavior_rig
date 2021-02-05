@@ -57,7 +57,7 @@ class Camera(AcquisitionObject):
     self.running = True
 
   # TODO: make sure this step should be in prepare_display or prepare_run
-  def prepare_display(self):
+  def prepare_display(self): #TODO: prepare_run?
     self._spincam.BeginAcquisition()
 
   def end_display(self):
@@ -228,6 +228,9 @@ class Camera(AcquisitionObject):
 
 
   def predisplay(self, frame):
+    #TODO: still get frame as input? but should return some kind of dictionary? or array?
+    #TODO: where does this get called from?
+
     # TODO: make sure text is not overlapping
     process = self.processing
 
