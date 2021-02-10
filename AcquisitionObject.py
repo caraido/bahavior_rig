@@ -4,6 +4,9 @@ from PIL import Image
 import time
 import numpy as np
 import os
+import threading
+import socket
+from utils.tcp_utils import initTCP,blockForConnections
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 TEMP_FILE=r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\temp_frames'
@@ -88,8 +91,11 @@ class AcquisitionObject:
 
   # NOT OVERLOADED
 
-  def __init__(self, run_rate, data_size):
+  def __init__(self, run_rate, data_size,host:str,port:int):
     # children should call the base init method with the run_rate (in Hz) and the data_size (a tuple for numpy to preallocate)
+    self.host=host
+    self.port=port
+
     self.run_rate = run_rate
     self.data_size = data_size
 
@@ -119,8 +125,6 @@ class AcquisitionObject:
     self.preview=False
 
     self.filepath=None
-    self.temp_filepath=TEMP_FILE
-    self.temp_file=TEMP_FILE
 
   @property
   def running(self):
@@ -161,26 +165,6 @@ class AcquisitionObject:
           self._file = None
 
   @property
-  def temp_file(self):
-    with self._temp_file_lock:
-      return self._temp_file
-
-  @temp_file.setter
-  def temp_file(self, temp_file):
-    if temp_file is not None:
-      with self._temp_file_lock:
-        if self._temp_file is not None:
-          self.close_temp_file(self._temp_file)
-
-        self._temp_file = self.open_temp_file(temp_file)
-    else:
-      with self._temp_file_lock:
-        if self._temp_file is not None:
-          self.close_temp_file(self._temp_file)
-          del self._temp_file
-          self._temp_file = None
-
-  @property
   def data(self):
     with self._data_lock:
       if self._data is None:
@@ -215,10 +199,13 @@ class AcquisitionObject:
           self._data = self.new_data
           self.prepare_display()
           self._data_count = 0
+          #self._displayThread = threading.Thread(target=self.display) #TODO: ??
+          #self._displayThread.start()
       else:
         with self._data_lock:
           if self._data is not None:
             self.end_display()
+            #self._displayThread.join()
           self._data = None
           self._data_count = 0
     else:
@@ -307,7 +294,6 @@ class AcquisitionObject:
   def stop(self):
     self.running = False
     self.file = None
-    self.temp_file=None
     self.data = False
     self.processing = None
 
@@ -316,28 +302,53 @@ class AcquisitionObject:
     if pause_time > 0:
       time.sleep(pause_time)
 
-  # def display(self):
-  #   frame_bytes = BytesIO()
-  #   last_count = 0
-  #   try:
-  #     data, data_count = self.data_and_count
-  #   except:
-  #     data = None
-  #   last_data_time = time.time()
+  def display(self):
+    #TODO: self._port??<- changed when audio settings changed?
+    #tcp setting
+    addr_list = []
+    sock= initTCP(self.host,self.port)
+    blockForConnections(sock,addr_list=addr_list)
 
-  #   while data is not None:
-  #     if data_count > last_count:
-  #       last_data_time = time.time()
-  #       last_count = data_count
-  #       data = self.predisplay(data)  # do any additional frame workup
+    last_count = 0
+    try:
+      data, data_count = self.data_and_count
+    except:
+      data = None
+    last_data_time = time.time()
 
-  #       frame_bytes.seek(0)
-  #       Image.fromarray(data).save(frame_bytes, 'bmp')
-  #       yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + frame_bytes.getvalue() + b'\r\n')
-  #     else:
-  #       self.sleep(last_data_time)
-  #     data, data_count = self.data_and_count
+    while data is not None:
+      if data_count > last_count:
+        last_data_time = time.time()
+        last_count = data_count
+        data = self.predisplay(data)  # do any additional frame workup
+        bytes_data = data.tobytes()
 
+        try:
+          conn, addr = sock.accept()
+          addr_list.append((conn, addr))
+          print(f'New connected client: {addr}')
+        except BlockingIOError:
+          pass
+
+        for j, (conn,addr) in reversed(list(enumerate(addr_list))):
+          try:
+            conn.send(bytes_data)  # TODO: not guaranteed to send all data??
+          except (ConnectionAbortedError, ConnectionResetError):  # disconnection
+            print(f'Client {addr} disconnected.')
+            del addr_list[j]
+            if len(addr_list) == 0:
+              print('No more connected clients. Pausing.')
+              continue
+          except BlockingIOError:
+            pass
+      else:
+        self.sleep(last_data_time)
+
+      if len(addr_list)==0:
+        blockForConnections(sock,addr_list)
+      #  waitForConnections...
+      #else: checkForConnectionsNonBlocking...
+      data, data_count = self.data_and_count
 
   def run(self):
     print('started child run')

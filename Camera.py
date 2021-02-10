@@ -19,7 +19,7 @@ DLC_UPDATE_EACH = 3  # frame interval for DLC update
 
 class Camera(AcquisitionObject):
 
-  def __init__(self, camlist, index, frame_rate):
+  def __init__(self, camlist, index, frame_rate,host,port):
 
     self._spincam = camlist.GetByIndex(index)
     self._spincam.Init()
@@ -33,11 +33,9 @@ class Camera(AcquisitionObject):
 
     self.device_serial_number, self.height, self.width = self.get_camera_properties()
 
-    AcquisitionObject.__init__(self, frame_rate, (self.width, self.height))
+    AcquisitionObject.__init__(self, frame_rate, (self.width, self.height),host,port)
 
-    # self._in_calibrating = False
-    # self._ex_calibrating = False
-
+  '''
   def start(self, filepath=None, display=False):
     if filepath is None:
       path = os.path.join(self.temp_file,'camera_'+self.device_serial_number)
@@ -61,6 +59,7 @@ class Camera(AcquisitionObject):
     self.filepath=filepath
     self.data = display
     self.running = True
+  '''
 
   # TODO: make sure this step should be in prepare_display or prepare_run
   def prepare_run(self): #TODO: prepare_run?
@@ -138,56 +137,18 @@ class Camera(AcquisitionObject):
       im.Release()
       yield data
 
-  '''
   def open_file(self, filepath):
     return ffmpeg \
         .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}',framerate=self.run_rate) \
         .output(filepath, vcodec='libx265') \
         .overwrite_output() \
         .run_async(pipe_stdin=True)
-  '''
-
-  def open_file(self, filepath):
-    # filepath should be somethings like 'video{cam_id}_stream/stream.m3u8'
-    split_time = 1.0  # in seconds, duration of each file
-    # NOTE: tried split_time = 0.25, 0.5. Seems like video gets choppier and latency worsens
-    # probably due to needing to fetch more files
-    # optimum seems to be near 1
-    # stream starts at a ~4sec delay
-    # but tends to catch up to a little over 1sec delay
-
-    file = (ffmpeg
-            .input('pipe:', format='rawvideo', pix_fmt='gray', s='1280x1024', framerate=self.run_rate)
-            .output(filepath,
-                    format='hls', hls_time=split_time,
-                    hls_playlist_type='event', hls_flags='omit_endlist',
-                    g=int(self.run_rate * split_time), sc_threshold=0, vcodec='h264',
-                    tune='zerolatency', preset='ultrafast')
-            .overwrite_output()
-            # .run_async(pipe_stdin=True)
-            .global_args('-loglevel', 'error')
-            .run_async(pipe_stdin=True, quiet=True)  # bug~need low logs if quiet
-            )
-
-    return file
 
   def close_file(self, fileObj):
     fileObj.stdin.close()
     fileObj.wait()
     del fileObj
 
-  def end_run(self):
-    with open(self.filepath, 'a') as fobj:
-      fobj.write('#EXT-X-ENDLIST')
-
-    if self._has_filepath:
-      head = os.path.split(os.path.split(self.filepath)[0])[0]
-
-      ffmpeg \
-        .input(self.filepath) \
-        .output(head + '.mp4', vcodec='copy') \
-        .run()
-    os.remove(os.path.split(self.filepath)[0])
 
   def save(self, data):
     self._file.stdin.write(data.tobytes())
