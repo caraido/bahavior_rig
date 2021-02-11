@@ -3,6 +3,7 @@ import socket
 import time
 import numpy as np
 import os
+from utils.tcp_utils import initTCP, getConnections, sendData
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 
@@ -306,10 +307,7 @@ class AcquisitionObject:
     last_data_time = time.time()
 
     recipients = []
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(self.address)
-    sock.listen()
+    sock = initTCP(self.address)
 
     getConnections(sock, recipients, block=True)
 
@@ -410,27 +408,3 @@ class AcquisitionObject:
     self.stop()
     self.wait_for()
     self.close()
-
-
-def getConnections(sock, recipients, block=True):
-  if block:
-    sock.setblocking(True)
-    conn, addr = sock.accept()
-    recipients.append((conn, addr))
-    sock.setblocking(False)
-  else:  # assumes we're not blocking...
-    try:
-      conn, addr = sock.accept()
-      recipients.append(conn, addr)
-    except BlockingIOError:
-      pass
-
-
-def sendData(data, recipients):
-  for i, (conn, addr) in reversed(list(enumerate(recipients))):
-    try:
-      conn.send(data)
-    except (ConnectionAbortedError, ConnectionResetError):
-      del recipients[i]
-    except BlockingIOError:
-      pass
