@@ -421,9 +421,10 @@ def getConnections(sock, recipients, block=True):
   else:  # assumes we're not blocking...
     try:
       conn, addr = sock.accept()
-      recipients.append(conn, addr))
+      recipients.append(conn, addr)
     except BlockingIOError:
       pass
+
 
 def sendData(data, recipients):
   for i, (conn, addr) in reversed(list(enumerate(recipients))):
