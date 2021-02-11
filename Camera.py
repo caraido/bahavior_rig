@@ -10,16 +10,14 @@ from utils.image_draw_utils import draw_dots
 import os
 
 
-
 FRAME_TIMEOUT = 100  # time in milliseconds to wait for pyspin to retrieve the frame
 DLC_RESIZE = 0.6  # resize the frame by this factor for DLC
 DLC_UPDATE_EACH = 3  # frame interval for DLC update
 
 
-
 class Camera(AcquisitionObject):
 
-  def __init__(self, camlist, index, frame_rate):
+  def __init__(self, camlist, index, frame_rate, address):
 
     self._spincam = camlist.GetByIndex(index)
     self._spincam.Init()
@@ -33,37 +31,16 @@ class Camera(AcquisitionObject):
 
     self.device_serial_number, self.height, self.width = self.get_camera_properties()
 
-    AcquisitionObject.__init__(self, frame_rate, (self.width, self.height))
+    AcquisitionObject.__init__(
+        self, frame_rate, (self.width, self.height), address)
 
     # self._in_calibrating = False
     # self._ex_calibrating = False
 
-  def start(self, filepath=None, display=False):
-    if filepath is None:
-      path = os.path.join(self.temp_file,'camera_'+self.device_serial_number)
-      if not os.path.exists(path):
-        os.mkdir(path)
-      else:
-        self.rmdir(path)
-        os.mkdir(path)
-      self.file=os.path.join(path,'stream.m3u8')
-      self._has_filepath=False
-    else:
-      path = os.path.join(filepath,'camera_'+self.device_serial_number)
-      if not os.path.exists(path):
-        os.mkdir(path)
-      else:
-        self.rmdir(path)
-        os.mkdir(path)
-      self.file=os.path.join(path,'stream.m3u8')
-      self._has_filepath=True
-
-    self.filepath=filepath
-    self.data = display
-    self.running = True
+  
 
   # TODO: make sure this step should be in prepare_display or prepare_run
-  def prepare_run(self): #TODO: prepare_run?
+  def prepare_run(self):  # TODO: prepare_run?
     self._spincam.BeginAcquisition()
 
   def end_run(self):
@@ -77,10 +54,10 @@ class Camera(AcquisitionObject):
       process['mode'] = 'DLC'
       process['processor'] = Processor()
       process['DLCLive'] = DLCLive(
-                                    model_path=options['modelpath'],
-                                    processor=process['processor'],
-                                    display=False,
-                                    resize=DLC_RESIZE)
+          model_path=options['modelpath'],
+          processor=process['processor'],
+          display=False,
+          resize=DLC_RESIZE)
       process['frame0'] = True
       return process
     else:  # mode should be 'intrinsic' or 'extrinsic'
@@ -89,11 +66,11 @@ class Camera(AcquisitionObject):
       # could move this to init if desired
       process['calibrator'] = Calib(options['mode'])
       return process
-      #process['calibrator'].root_config_path= self.file # does this return the file path?
+      # process['calibrator'].root_config_path= self.file # does this return the file path?
 
-      #process['calibrator'].reset()
-      #if options['mode'] == 'extrinsic':
-        #process['calibrator'].load_ex_config(self.device_serial_number)
+      # process['calibrator'].reset()
+      # if options['mode'] == 'extrinsic':
+      # process['calibrator'].load_ex_config(self.device_serial_number)
 
   def end_processing(self, process):
     if process['mode'] == 'DLC':
@@ -118,7 +95,7 @@ class Camera(AcquisitionObject):
       else:
         return process['DLCLive'].get_pose(data), None
     elif process['mode'] == 'intrinsic':
-      result = process['calibrator'].in_calibrate(data,data_count)
+      result = process['calibrator'].in_calibrate(data, data_count)
       #result = self.intrinsic_calibration(data, process)
       return result, None
     elif process['mode'] == 'extrinsic':
@@ -138,56 +115,17 @@ class Camera(AcquisitionObject):
       im.Release()
       yield data
 
-  '''
   def open_file(self, filepath):
     return ffmpeg \
-        .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}',framerate=self.run_rate) \
+        .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}', framerate=self.run_rate) \
         .output(filepath, vcodec='libx265') \
         .overwrite_output() \
         .run_async(pipe_stdin=True)
-  '''
-
-  def open_file(self, filepath):
-    # filepath should be somethings like 'video{cam_id}_stream/stream.m3u8'
-    split_time = 1.0  # in seconds, duration of each file
-    # NOTE: tried split_time = 0.25, 0.5. Seems like video gets choppier and latency worsens
-    # probably due to needing to fetch more files
-    # optimum seems to be near 1
-    # stream starts at a ~4sec delay
-    # but tends to catch up to a little over 1sec delay
-
-    file = (ffmpeg
-            .input('pipe:', format='rawvideo', pix_fmt='gray', s='1280x1024', framerate=self.run_rate)
-            .output(filepath,
-                    format='hls', hls_time=split_time,
-                    hls_playlist_type='event', hls_flags='omit_endlist',
-                    g=int(self.run_rate * split_time), sc_threshold=0, vcodec='h264',
-                    tune='zerolatency', preset='ultrafast')
-            .overwrite_output()
-            # .run_async(pipe_stdin=True)
-            .global_args('-loglevel', 'error')
-            .run_async(pipe_stdin=True, quiet=True)  # bug~need low logs if quiet
-            )
-
-    return file
 
   def close_file(self, fileObj):
     fileObj.stdin.close()
     fileObj.wait()
     del fileObj
-
-  def end_run(self):
-    with open(self.filepath, 'a') as fobj:
-      fobj.write('#EXT-X-ENDLIST')
-
-    if self._has_filepath:
-      head = os.path.split(os.path.split(self.filepath)[0])[0]
-
-      ffmpeg \
-        .input(self.filepath) \
-        .output(head + '.mp4', vcodec='copy') \
-        .run()
-    os.remove(os.path.split(self.filepath)[0])
 
   def save(self, data):
     self._file.stdin.write(data.tobytes())
@@ -232,10 +170,9 @@ class Camera(AcquisitionObject):
   #                                 self.height)
   #     # return self.display()
 
-
   def predisplay(self, frame):
-    #TODO: still get frame as input? but should return some kind of dictionary? or array?
-    #TODO: where does this get called from?
+    # TODO: still get frame as input? but should return some kind of dictionary? or array?
+    # TODO: where does this get called from?
 
     # TODO: make sure text is not overlapping
     process = self.processing
@@ -258,7 +195,7 @@ class Camera(AcquisitionObject):
             else:
               text = 'Found configuration file for this camera. Calibrating...'
             cv2.putText(frame, text, (50, 60),
-                          cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+                        cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
             '''
             if results['allAligns']:
@@ -276,7 +213,7 @@ class Camera(AcquisitionObject):
                         cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
     if self.file is not None:
-      text='recording...'
+      text = 'recording...'
       cv2.putText(frame, text, (700, 50),
                   cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
 
