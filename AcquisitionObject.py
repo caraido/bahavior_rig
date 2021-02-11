@@ -1,15 +1,11 @@
 import threading
-from io import BytesIO
-from PIL import Image
+import socket
 import time
 import numpy as np
 import os
-import threading
-import socket
-from utils.tcp_utils import initTCP,blockForConnections
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
-TEMP_FILE=r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\temp_frames'
+
 
 class AcquisitionObject:
   #############
@@ -17,11 +13,6 @@ class AcquisitionObject:
   #############
 
   def open_file(self, fileObj):
-    # anything that needs to be done to open a save file for this class
-    # file object is just whatever you want to pass to close_file() later on, but cannot be None
-    return fileObj
-
-  def open_temp_file(self, fileObj):
     # anything that needs to be done to open a save file for this class
     # file object is just whatever you want to pass to close_file() later on, but cannot be None
     return fileObj
@@ -76,11 +67,6 @@ class AcquisitionObject:
     # fileObj is just whatever gets passed from save_file()
     pass
 
-  def close_temp_file(self, fileObj):
-    # anything that needs to be done to close a save file for this class
-    # fileObj is just whatever gets passed from save_file()
-    pass
-
   def end_processing(self, process):
     # tear down the process
     pass
@@ -91,11 +77,8 @@ class AcquisitionObject:
 
   # NOT OVERLOADED
 
-  def __init__(self, run_rate, data_size,host:str,port:int):
+  def __init__(self, run_rate, data_size, address):
     # children should call the base init method with the run_rate (in Hz) and the data_size (a tuple for numpy to preallocate)
-    self.host=host
-    self.port=port
-
     self.run_rate = run_rate
     self.data_size = data_size
 
@@ -104,9 +87,6 @@ class AcquisitionObject:
 
     self._file_lock = threading.Lock()
     self._file = None
-
-    self._temp_file_lock=threading.Lock()
-    self._temp_file=None
 
     self._data_lock = threading.Lock()
     self._data = None
@@ -120,11 +100,12 @@ class AcquisitionObject:
 
     self._has_runner = False
     self._has_processor = False
-    self._has_filepath=False
+    self._has_filepath = False
+    self._has_displayer = False
 
-    self.preview=False
+    self.address = address
 
-    self.filepath=None
+    self.filepath = None
 
   @property
   def running(self):
@@ -181,9 +162,9 @@ class AcquisitionObject:
   def data_and_count(self):
     with self._data_lock:
       if self._data is None:
-        return None,0
+        return None, 0
       else:
-        return self._data.copy(),self._data_count
+        return self._data.copy(), self._data_count
 
   @property
   def new_data(self):
@@ -199,19 +180,21 @@ class AcquisitionObject:
           self._data = self.new_data
           self.prepare_display()
           self._data_count = 0
-          #self._displayThread = threading.Thread(target=self.display) #TODO: ??
-          #self._displayThread.start()
       else:
         with self._data_lock:
           if self._data is not None:
             self.end_display()
-            #self._displayThread.join()
           self._data = None
           self._data_count = 0
     else:
       with self._data_lock:
         self._data = data
         self._data_count += 1
+
+  @property
+  def displaying(self):
+    with self._data_lock:
+      return self._data is not None
 
   @property
   def processing(self):
@@ -274,7 +257,7 @@ class AcquisitionObject:
 
   @process_rate.setter
   def process_rate(self, process_rate):
-    #self._process_interval = (1/process_rate) - BUFFER_TIME # division by zero error
+    # self._process_interval = (1/process_rate) - BUFFER_TIME # division by zero error
     self._process_interval = (1/(process_rate+0.000001)-BUFFER_TIME)
 
   @property
@@ -286,8 +269,8 @@ class AcquisitionObject:
     self._data_size = data_size
 
   def start(self, filepath=None, display=False):
-    self.filepath=filepath
-    self.file=filepath
+    self.filepath = filepath
+    self.file = filepath
     self.data = display
     self.running = True
 
@@ -297,58 +280,56 @@ class AcquisitionObject:
     self.data = False
     self.processing = None
 
+  def wait_for(self):
+    while self._has_runner or self._has_processor or self._has_displayer:
+      check_time = time.time()
+      self.sleep(check_time)
+
   def sleep(self, last):
     pause_time = last + self.run_interval - time.time()
     if pause_time > 0:
       time.sleep(pause_time)
 
   def display(self):
-    #TODO: self._port??<- changed when audio settings changed?
-    #tcp setting
-    addr_list = []
-    sock= initTCP(self.host,self.port)
-    blockForConnections(sock,addr_list=addr_list)
+    if self._has_displayer:
+      return  # only 1 runner at a time
+
+    self._has_displayer = True
 
     last_count = 0
     try:
       data, data_count = self.data_and_count
     except:
-      data = None
+      self._has_displayer = False
+      return
+
     last_data_time = time.time()
 
+    recipients = []
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sock.bind(self.address)
+    sock.listen()
+
+    getConnections(sock, recipients, block=True)
+
     while data is not None:
+      if len(recipients) == 0:
+        getConnections(sock, recipients, block=True)
+
       if data_count > last_count:
         last_data_time = time.time()
         last_count = data_count
+
         data = self.predisplay(data)  # do any additional frame workup
-        bytes_data = data.tobytes()
 
-        try:
-          conn, addr = sock.accept()
-          addr_list.append((conn, addr))
-          print(f'New connected client: {addr}')
-        except BlockingIOError:
-          pass
+        getConnections(sock, recipients, block=False)  # check for new clients
+        sendData(data.astype(np.uint8).tobytes(), recipients)
 
-        for j, (conn,addr) in reversed(list(enumerate(addr_list))):
-          try:
-            conn.send(bytes_data)  # TODO: not guaranteed to send all data??
-          except (ConnectionAbortedError, ConnectionResetError):  # disconnection
-            print(f'Client {addr} disconnected.')
-            del addr_list[j]
-            if len(addr_list) == 0:
-              print('No more connected clients. Pausing.')
-              continue
-          except BlockingIOError:
-            pass
-      else:
-        self.sleep(last_data_time)
-
-      if len(addr_list)==0:
-        blockForConnections(sock,addr_list)
-      #  waitForConnections...
-      #else: checkForConnectionsNonBlocking...
+      self.sleep(last_data_time)
       data, data_count = self.data_and_count
+
+    self._has_displayer = False
 
   def run(self):
     print('started child run')
@@ -418,16 +399,38 @@ class AcquisitionObject:
 
   def rmdir(self, path):
     # print('rming from acq obj')
-    for root,dirs,files in os.walk(path, topdown=False):
+    for root, dirs, files in os.walk(path, topdown=False):
       for name in files:
         os.remove(os.path.join(root, name))
       for name in dirs:
-        os.rmdir(os.path.join(root,name))
+        os.rmdir(os.path.join(root, name))
     os.rmdir(path)
 
   def __del__(self):
     self.stop()
-    while self._has_runner or self._has_processor:
-      check_time = time.time()
-      self.sleep(check_time)
+    self.wait_for()
     self.close()
+
+
+def getConnections(sock, recipients, block=True):
+  if block:
+    sock.setblocking(True)
+    conn, addr = sock.accept()
+    recipients.append((conn, addr))
+    sock.setblocking(False)
+  else:  # assumes we're not blocking...
+    try:
+      conn, addr = sock.accept()
+      recipients.append(conn, addr)
+    except BlockingIOError:
+      pass
+
+
+def sendData(data, recipients):
+  for i, (conn, addr) in reversed(list(enumerate(recipients))):
+    try:
+      conn.send(data)
+    except (ConnectionAbortedError, ConnectionResetError):
+      del recipients[i]
+    except BlockingIOError:
+      pass

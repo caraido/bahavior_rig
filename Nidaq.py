@@ -21,14 +21,14 @@ class Nidaq(AcquisitionObject):
   # def __init__(self, frame_rate, audio_settings):
     # Nidaq(status['frame_rate'].current, status['sample frequency'].current,
     #  status['read rate'].current, status['spectrogram'].current)
-  def __init__(self, frame_rate, sample_rate, read_rate, spectrogram_settings):
+  def __init__(self, frame_rate, sample_rate, read_rate, spectrogram_settings, hostname):
     self.sample_rate = int(sample_rate)
     self.run_rate = read_rate
 
     self.parse_settings(spectrogram_settings)
 
     AcquisitionObject.__init__(
-        self, self.run_rate, (int(self.sample_rate // self.run_rate), 1))
+        self, self.run_rate, (int(self.sample_rate // self.run_rate), 1), (hostname, spectrogram_settings['port'].current))
 
     # TODO: verify that we are not violating the task state model: https://zone.ni.com/reference/en-XX/help/370466AH-01/mxcncpts/taskstatemodel/
     # specifically, if we change logging mode, do we need to re-commit the task??
@@ -88,59 +88,11 @@ class Nidaq(AcquisitionObject):
     #if _nfft.changed() or _nx.changed():
       #self._port = self._port + 1
 
-  def start(self, filepath=None, display=False):
-    path = os.path.join(self.temp_filepath, 'spectrogram')
-    if not os.path.exists(path):
-      os.mkdir(path)
-    else:
-      self.rmdir(path)
-      os.mkdir(path)
-    self.temp_file = os.path.join(path, 'stream.m3u8')
-
-    if filepath is None:
-      self._has_filepath = False
-    else:
-      self._has_filepath = True
-
-    self.file = filepath
-    self.data = display
-    self.running = True
 
   def open_file(self, fileObj):
     self._log_mode[0] = True
     self._filepath = fileObj
     return fileObj
-
-  def open_temp_file(self, fileObj):
-
-    # filepath should be somethings like 'video{cam_id}_stream/stream.m3u8'
-    split_time = 1.0  # in seconds, duration of each file
-    # NOTE: tried split_time = 0.25, 0.5. Seems like video gets choppier and latency worsens
-    # probably due to needing to fetch more files
-    # optimum seems to be near 1
-    # stream starts at a ~4sec delay
-    # but tends to catch up to a little over 1sec delay
-
-    # TODO: if _nx or _nfft change, we need to close and reopen file!!
-    file = (ffmpeg
-            .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self._nx}x{self._nfft}', framerate=self.run_rate)
-            .output(fileObj,
-                    format='hls', hls_time=split_time,
-                    hls_playlist_type='event', hls_flags='omit_endlist',
-                    g=int(self.run_rate * split_time), sc_threshold=0, vcodec='h264',
-                    tune='zerolatency', preset='ultrafast')
-            .overwrite_output()
-            # .run_async(pipe_stdin=True)
-            .global_args('-loglevel', 'error')
-            # bug~need low logs if quiet
-            .run_async(pipe_stdin=True, quiet=True)
-            )
-    return file
-
-  def close_temp_file(self, fileObj):
-    fileObj.stdin.close()
-    fileObj.wait()
-    del fileObj
 
   def prepare_display(self):
     self._log_mode[1] = True
@@ -203,43 +155,7 @@ class Nidaq(AcquisitionObject):
 
     # interpSpect = mpl.cm.viridis(interpSpect) * 255  #colormap
     interpSpect = interpSpect * 255  # TODO: decide how to handle colormapping?
-    return interpSpect.astype(np.uint8)
-
-  def run(self):
-    print('started child run')
-    if self._has_runner:
-      return  # only 1 runner at a time
-
-    self._has_runner = True
-    data = self.new_data
-    capture = self.capture(data)
-    data_time = time.time() - self.run_interval
-
-    while True:
-      self.sleep(data_time)
-
-      with self._running_lock:
-        # try to capture the next data segment
-        if self._running:
-          data_time = time.time()
-          data = next(capture)
-        else:
-          self._has_runner = False
-          return
-
-      # save the current data
-      with self._file_lock:
-        if self._file is not None:
-          self.save(data)
-
-      # save the spectrogram to temp
-      with self._temp_file_lock:
-        if self._temp_file is not None:
-          spectrogram = self.predisplay(data)
-          self._temp_file.stdin.write(spectrogram.tobytes())
-
-      # buffer the current data
-      self.data = data
+    return interpSpect
 
   def end_run(self):
     self.audio_task.stop()

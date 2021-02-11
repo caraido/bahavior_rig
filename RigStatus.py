@@ -80,10 +80,10 @@ class RigStatus(dict):
   def __setitem__(self, key,  value):
     self._status[key] = value
 
-  @ property
+  @property
   def allowed(self):
     return {k: v.allowed for k, v in self._status.items()}
 
-  @ property
+  @property
   def update(self):
     return {k: v.update for k, v in self._status.items()}

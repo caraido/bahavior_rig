@@ -11,19 +11,20 @@ import ProcessingGroup as pg
 
 class AcquisitionGroup:
   # def __init__(self, frame_rate=30, audio_settings=None):
-  def __init__(self, status):
+  def __init__(self, status, hostname='localhost'):
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
     self.nCameras = self._camlist.GetSize()
-    self.cameras = [Camera(self._camlist, i, status['frame rate'].current)
+    self.cameras = [Camera(self._camlist, i, status['frame rate'].current, (hostname, status[f'camera {i}'].current['port'].current))
                     for i in range(self.nCameras)]
     self.nidaq = Nidaq(status['frame rate'].current, status['sample frequency'].current,
-                       status['read rate'].current, status['spectrogram'].current)
+                       status['read rate'].current, status['spectrogram'].current, hostname)
     self.children = self.cameras + [self.nidaq]
     self.nChildren = self.nCameras + 1
 
     self._processors = [None] * self.nChildren
     self._runners = [None] * self.nChildren
+    self._displayers = [None] * self.nChildren
     self.filepaths = None
 
     self.started = False
@@ -35,6 +36,10 @@ class AcquisitionGroup:
     print('done setting up ag. is camera 3 running? ', self.cameras[3].running)
 
   def start(self, filepaths=None, isDisplayed=True):
+    if self.started:
+      print('cannot start without stopping!!')
+      return
+
     self.filepaths = filepaths
     if not self.filepaths:
       self.filepaths = [None] * self.nChildren
@@ -42,6 +47,8 @@ class AcquisitionGroup:
       isDisplayed = [False] * self.nChildren
 
     if not isinstance(isDisplayed, list) or len(isDisplayed) == 1:
+      # TODO: does this work? what if isDisplayed = [True]?
+      # wouldn't we then get [[True], [True], [True], ...] ?
       isDisplayed = [isDisplayed] * self.nChildren
 
     print('detected %d cameras' % self.nCameras)
@@ -76,6 +83,9 @@ class AcquisitionGroup:
         print('made thread object, starting')
         self._runners[i].start()
         print('done starting')
+      if self._displayers[i] is None or not self._displayers[i].is_alive():
+        self._displayers[i] = threading.Thread(target=child.display)
+        self._displayers[i].start()
     self.running = True
     #
     #       # if not self._runners[-1].is_alive():
@@ -99,8 +109,10 @@ class AcquisitionGroup:
     # self.nidaq.stop()  # make sure cameras are stopped before stopping triggers
     for child in self.children:
       child.stop()
+    for child in self.children:
+      child.wait_for()
     #del self.children
-    self._processors = [None] * self.nChildren
+    # self._processors = [None] * self.nChildren
 
     self.processing = False
     self.running = False
