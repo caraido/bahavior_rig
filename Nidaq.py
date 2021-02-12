@@ -85,6 +85,7 @@ class Nidaq(AcquisitionObject):
           spectrogram_settings['maximum frequency'].current), num=int(spectrogram_settings['frequency resolution'].current))
 
     self._freq_correct = spectrogram_settings['noise correction'].current
+    print(f'_nx is {self._nx} and _nfft is {self._nfft}')
 
   def open_file(self, filePath):
     self._log_mode[0] = True
