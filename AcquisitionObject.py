@@ -284,7 +284,7 @@ class AcquisitionObject:
   def wait_for(self):
     while self._has_runner or self._has_processor or self._has_displayer:
       print(
-          'AcqObj has runner? {self._has_runner}. has processor? {self._has_processor}. has displayer? {self._has_displayer}. Pausing.')
+          f'AcqObj has runner? {self._has_runner}. has processor? {self._has_processor}. has displayer? {self._has_displayer}. Pausing.')
       check_time = time.time()
       self.sleep(check_time)
 
