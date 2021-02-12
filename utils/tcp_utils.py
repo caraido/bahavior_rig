@@ -39,5 +39,5 @@ def doShutdown(sock, recipients):
   for conn, _ in recipients:
     conn.shutdown(socket.SHUT_RDWR)
     conn.close()
-  sock.shutdown(socket.SHUT_RDWR)
+  sock.shutdown(socket.SHUT_RD)  # this is just a listener socket, no writes
   sock.close()
