@@ -134,7 +134,6 @@ class Nidaq(AcquisitionObject):
     There are many ways to approach this, in particular by using wavelets or by using
     overlapping FFTs. For now just trying non-overlapping FFTs ~ the simplest approach.
     '''
-
     _, _, spectrogram = signal.spectrogram(
         data[:, 0], self.sample_rate, nperseg=self._window, noverlap=self._overlap)
 
@@ -150,9 +149,8 @@ class Nidaq(AcquisitionObject):
     interpSpect -= thisMin
 
     thisMax = np.amax(interpSpect, axis=(0, 1))
-    print(f'spectrogram maximum: {thisMax}')
-
-    interpSpect /= thisMax  # normalized to [0,1]
+    if thisMax != 0:
+      interpSpect /= thisMax  # normalized to [0,1]
 
     # interpSpect = mpl.cm.viridis(interpSpect) * 255  # colormap
     interpSpect = interpSpect * 255  # TODO: decide how to handle colormapping?

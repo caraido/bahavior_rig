@@ -316,10 +316,14 @@ class AcquisitionObject:
       # we don't have the thread lock but should be okay for just reading None status?
 
       if len(recipients) == 0:
+        print('no recipients. waiting for more')
         self.sleep(time.time())
         getConnections(sock, recipients, block=False)
+      else:
+        self.sleep(last_data_time)
+        data, data_count = self.data_and_count
 
-      elif data_count > last_count:
+      if data_count > last_count:
         last_data_time = time.time()
         last_count = data_count
 
@@ -328,9 +332,7 @@ class AcquisitionObject:
         getConnections(sock, recipients, block=False)  # check for new clients
         sendData(data.astype(np.uint8).tobytes(), recipients)
 
-        self.sleep(last_data_time)
-        data, data_count = self.data_and_count
-
+    print('data was none. shutting down socket.')
     doShutdown(sock, recipients)
     self._has_displayer = False
 
