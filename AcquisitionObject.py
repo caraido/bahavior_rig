@@ -311,13 +311,18 @@ class AcquisitionObject:
     recipients = []
     sock = initTCP(self.address)
 
-    getConnections(sock, recipients, block=True)
+    # getConnections(sock, recipients, block=True)
 
-    while data is not None:
+    while self._data is not None:
+      # NOTE: I don't love how when we have no recipients we keep requesting the data anyways
+      # that's why I elected to check if self._data is none instead
+      # we don't have the thread lock but should be okay for just reading None status?
+
       if len(recipients) == 0:
-        getConnections(sock, recipients, block=True)
+        self.sleep(last_data_time)
+        getConnections(sock, recipients, block=False)
 
-      if data_count > last_count:
+      elif data_count > last_count:
         last_data_time = time.time()
         last_count = data_count
 
@@ -326,9 +331,10 @@ class AcquisitionObject:
         getConnections(sock, recipients, block=False)  # check for new clients
         sendData(data.astype(np.uint8).tobytes(), recipients)
 
-      self.sleep(last_data_time)
-      data, data_count = self.data_and_count
-      print(f'Got data. Is none? {data is None}')
+        self.sleep(last_data_time)
+        data, data_count = self.data_and_count
+
+    print('Data was none. Exiting.')
 
     doShutdown(sock, recipients)
     self._has_displayer = False
