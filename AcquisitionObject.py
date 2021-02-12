@@ -328,6 +328,7 @@ class AcquisitionObject:
 
       self.sleep(last_data_time)
       data, data_count = self.data_and_count
+      print(f'Got data. Is none? {data is None}')
 
     doShutdown(sock, recipients)
     self._has_displayer = False
