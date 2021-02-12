@@ -76,16 +76,14 @@ class AcquisitionGroup:
 
     # else:
     for i, child in enumerate(self.children):
-      print('child ', i)
       if self._runners[i] is None or not self._runners[i].is_alive():
-        print('was not alive')
         self._runners[i] = threading.Thread(target=child.run)
-        print('made thread object, starting')
         self._runners[i].start()
-        print('done starting')
+        print(f'started child {i} runner')
       if self._displayers[i] is None or not self._displayers[i].is_alive():
         self._displayers[i] = threading.Thread(target=child.display)
         self._displayers[i].start()
+        print(f'started child {i} displayer')
     self.running = True
     #
     #       # if not self._runners[-1].is_alive():

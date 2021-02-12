@@ -6,6 +6,7 @@ def initTCP(address):
   sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
   sock.bind(address)
   sock.listen()
+  sock.setblocking(False)
   return sock
 
 
