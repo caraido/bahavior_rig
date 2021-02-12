@@ -20,6 +20,7 @@ def getConnections(sock, recipients, block=True):
     try:
       conn, addr = sock.accept()
       recipients.append((conn, addr))
+      print(f'Added recipient {addr} to socket serving on {sock.getsockname}')
     except BlockingIOError:
       pass
 
@@ -28,11 +29,13 @@ def getConnections(sock, recipients, block=True):
 
 
 def sendData(data, recipients):
-  for i, (conn, _) in reversed(list(enumerate(recipients))):
+  for i, (conn, addr) in reversed(list(enumerate(recipients))):
     try:
       conn.send(data)
     except (ConnectionAbortedError, ConnectionResetError):
       # conn.shutdown(socket.SHUT_RDWR)
+      print(
+          f'Recipient {addr} disconnected from socket serving on {conn.getsockname}')
       conn.close()  # will this error out?
       del recipients[i]
     except BlockingIOError:
