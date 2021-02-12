@@ -13,9 +13,10 @@ class AcquisitionObject:
   # LIFECYCLE METHODS TO BE OVERLOADED, LISTED IN ORDER:
   #############
 
-  def open_file(self, fileObj):
+  def open_file(self, filePath):
     # anything that needs to be done to open a save file for this class
     # file object is just whatever you want to pass to close_file() later on, but cannot be None
+    fileObj = {}
     return fileObj
 
   def prepare_display(self):
@@ -101,12 +102,12 @@ class AcquisitionObject:
 
     self._has_runner = False
     self._has_processor = False
-    self._has_filepath = False
+    # self._has_filepath = False
     self._has_displayer = False
 
     self.address = address
 
-    self.filepath = None
+    # self.filepath = None
 
   @property
   def running(self):
@@ -270,7 +271,7 @@ class AcquisitionObject:
     self._data_size = data_size
 
   def start(self, filepath=None, display=False):
-    self.filepath = filepath
+    # self.filepath = filepath
     self.file = filepath
     self.data = display
     self.running = True

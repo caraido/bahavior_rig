@@ -37,9 +37,8 @@ class Camera(AcquisitionObject):
     # self._in_calibrating = False
     # self._ex_calibrating = False
 
-  
-
   # TODO: make sure this step should be in prepare_display or prepare_run
+
   def prepare_run(self):  # TODO: prepare_run?
     self._spincam.BeginAcquisition()
 
@@ -116,6 +115,8 @@ class Camera(AcquisitionObject):
       yield data
 
   def open_file(self, filepath):
+    # path = os.path.join(filepath, f'{self.device_serial_number}.mp4')
+    print(f'saving camera data to {filepath}')
     return ffmpeg \
         .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}', framerate=self.run_rate) \
         .output(filepath, vcodec='libx265') \
