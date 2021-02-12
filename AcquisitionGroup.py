@@ -17,7 +17,7 @@ class AcquisitionGroup:
     self.nCameras = self._camlist.GetSize()
     self.nChildren = self.nCameras + 1
     if not isinstance(ports, list):
-      ports = [ports + i for i in range(nChildren)]
+      ports = [ports + i for i in range(self.nChildren)]
 
     self.cameras = [Camera(self._camlist, i, status['frame rate'].current, (hostname, ports[i]))
                     for i in range(self.nCameras)]
