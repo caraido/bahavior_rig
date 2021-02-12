@@ -11,16 +11,20 @@ import ProcessingGroup as pg
 
 class AcquisitionGroup:
   # def __init__(self, frame_rate=30, audio_settings=None):
-  def __init__(self, status, hostname='localhost'):
+  def __init__(self, status, hostname='localhost', ports=5002):
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
     self.nCameras = self._camlist.GetSize()
-    self.cameras = [Camera(self._camlist, i, status['frame rate'].current, (hostname, status[f'camera {i}'].current['port'].current))
+    self.nChildren = self.nCameras + 1
+    if not isinstance(ports, list):
+      ports = [ports + i for i in range(nChildren)]
+
+    self.cameras = [Camera(self._camlist, i, status['frame rate'].current, (hostname, ports[i]))
                     for i in range(self.nCameras)]
     self.nidaq = Nidaq(status['frame rate'].current,
-                       status['sample frequency'].current, status['spectrogram'].current, hostname)
+                       status['sample frequency'].current, status['spectrogram'].current, (
+                           hostname, ports[-1]))
     self.children = self.cameras + [self.nidaq]
-    self.nChildren = self.nCameras + 1
 
     self._processors = [None] * self.nChildren
     self._runners = [None] * self.nChildren
@@ -106,7 +110,7 @@ class AcquisitionGroup:
     for child in self.children:
       print('waiting for next child')
       child.wait_for()
-    #del self.children
+    # del self.children
     # self._processors = [None] * self.nChildren
 
     self.processing = False
@@ -175,7 +179,7 @@ if __name__ == '__main__':
   # record
   ag.start(filepaths=paths)
   ag.run()
-  #ag.process(0,{'mode': 'intrinsic'})
+  # ag.process(0,{'mode': 'intrinsic'})
   # this should work when there's file path
   ag.process(0, {'mode': 'DLC', 'modelpath': default_model_path})
 
