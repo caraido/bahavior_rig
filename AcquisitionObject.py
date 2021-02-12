@@ -293,15 +293,18 @@ class AcquisitionObject:
 
   def display(self):
     if self._has_displayer:
+      print('already had displayer. exiting.')
       return  # only 1 runner at a time
 
     self._has_displayer = True
+    print('created displayer')
 
     last_count = 0
     try:
       data, data_count = self.data_and_count
     except:
       self._has_displayer = False
+      print('acquisition object not in display mode. exiting.')
       return
 
     last_data_time = time.time()
