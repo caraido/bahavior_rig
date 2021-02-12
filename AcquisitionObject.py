@@ -326,7 +326,7 @@ class AcquisitionObject:
         data = self.predisplay(data)  # do any additional frame workup
 
         getConnections(sock, recipients, block=False)  # check for new clients
-        sendData(data.astype(np.uint8).tobytes('F'), recipients)
+        sendData(data.astype(np.uint8).tobytes(), recipients)
 
         self.sleep(last_data_time)
         data, data_count = self.data_and_count
