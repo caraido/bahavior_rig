@@ -21,9 +21,8 @@ class Nidaq(AcquisitionObject):
   # def __init__(self, frame_rate, audio_settings):
     # Nidaq(status['frame_rate'].current, status['sample frequency'].current,
     #  status['read rate'].current, status['spectrogram'].current)
-  def __init__(self, frame_rate, sample_rate, read_rate, spectrogram_settings, hostname):
+  def __init__(self, frame_rate, sample_rate, spectrogram_settings, hostname):
     self.sample_rate = int(sample_rate)
-    self.run_rate = read_rate
 
     self.parse_settings(spectrogram_settings)
 
@@ -68,6 +67,7 @@ class Nidaq(AcquisitionObject):
         spectrogram_settings['pixel duration'].current * self.sample_rate)
     self._overlap = int(
         spectrogram_settings['pixel fractional overlap'].current * self._window)
+    self.run_rate = spectrogram_settings['read rate'].current
 
     _, _, spectrogram = signal.spectrogram(
         np.zeros((int(self.sample_rate // self.run_rate),)), self.sample_rate, nperseg=self._window, noverlap=self._overlap)
