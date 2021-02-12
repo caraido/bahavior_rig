@@ -327,6 +327,7 @@ class AcquisitionObject:
       self.sleep(last_data_time)
       data, data_count = self.data_and_count
 
+    sock.close()
     self._has_displayer = False
 
   def run(self):

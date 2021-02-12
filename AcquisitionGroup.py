@@ -37,7 +37,7 @@ class AcquisitionGroup:
 
   def start(self, filepaths=None, isDisplayed=True):
     if self.started:
-      print('cannot start without stopping!!')
+      print('already started. Filepath/display unchanged.')
       return
 
     self.filepaths = filepaths

@@ -86,7 +86,6 @@ class Nidaq(AcquisitionObject):
 
     self._freq_correct = spectrogram_settings['noise correction'].current
 
-
   def open_file(self, fileObj):
     self._log_mode[0] = True
     self._filepath = fileObj
@@ -158,7 +157,6 @@ class Nidaq(AcquisitionObject):
   def end_run(self):
     self.audio_task.stop()
     self.trigger_task.stop()
-    os.remove(os.path.split(self.temp_filepath)[0])
 
   def end_display(self):
     self._log_mode[1] = True
