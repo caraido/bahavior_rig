@@ -294,18 +294,15 @@ class AcquisitionObject:
 
   def display(self):
     if self._has_displayer:
-      print('already had displayer. exiting.')
       return  # only 1 runner at a time
 
     self._has_displayer = True
-    print('created displayer')
 
     last_count = 0
     try:
       data, data_count = self.data_and_count
     except:
       self._has_displayer = False
-      print('acquisition object not in display mode. exiting.')
       return
 
     last_data_time = time.time()
@@ -338,10 +335,8 @@ class AcquisitionObject:
 
     doShutdown(sock, recipients)
     self._has_displayer = False
-    print('exiting displayer.')
 
   def run(self):
-    print('started child run')
     if self._has_runner:
       return  # only 1 runner at a time
 
@@ -407,7 +402,7 @@ class AcquisitionObject:
       self.results = results
 
   def rmdir(self, path):
-    # print('rming from acq obj')
+    # print('rming from acq obj') #TODO: are we using this? if not get rid of it
     for root, dirs, files in os.walk(path, topdown=False):
       for name in files:
         os.remove(os.path.join(root, name))
