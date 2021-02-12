@@ -85,8 +85,7 @@ class Nidaq(AcquisitionObject):
           spectrogram_settings['maximum frequency'].current), num=int(spectrogram_settings['frequency resolution'].current))
 
     self._freq_correct = spectrogram_settings['noise correction'].current
-    #if _nfft.changed() or _nx.changed():
-      #self._port = self._port + 1
+    print(f'_nx is {self._nx} and _nfft is {self._nfft}')
 
   def open_file(self, filePath):
     self._log_mode[0] = True
@@ -154,7 +153,7 @@ class Nidaq(AcquisitionObject):
 
     interpSpect /= thisMax  # normalized to [0,1]
 
-    # interpSpect = mpl.cm.viridis(interpSpect) * 255  #colormap
+    # interpSpect = mpl.cm.viridis(interpSpect) * 255  # colormap
     interpSpect = interpSpect * 255  # TODO: decide how to handle colormapping?
     return interpSpect
 
