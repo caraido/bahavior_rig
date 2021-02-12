@@ -109,6 +109,7 @@ class Camera(AcquisitionObject):
         im = self._spincam.GetNextImage(FRAME_TIMEOUT)
       except PySpin.SpinnakerException as e:
         print(f'Error in spinnaker: {e}. Assumed innocuous.')
+        continue
 
       if im.IsIncomplete():
         status = im.GetImageStatus()
