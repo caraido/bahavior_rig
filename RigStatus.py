@@ -50,6 +50,7 @@ class RigStatusItem:
       except:
         'Couldn\'t set sub-status'
     else:
+      print(f'attempting to set {self._current} to {state}')
       self._current = state
 
     self._callback(state)
