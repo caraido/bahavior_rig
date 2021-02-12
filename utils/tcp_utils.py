@@ -22,14 +22,17 @@ def getConnections(sock, recipients, block=True):
     except BlockingIOError:
       pass
 
+# NOTE: I think that conn.shutdown is proper form, but keep getting errors
+# this might be related to socket.SO_REUSEADDR?
+
 
 def sendData(data, recipients):
   for i, (conn, _) in reversed(list(enumerate(recipients))):
     try:
       conn.send(data)
     except (ConnectionAbortedError, ConnectionResetError):
-      conn.shutdown(socket.SHUT_RDWR)  # will this error out?
-      conn.close()
+      # conn.shutdown(socket.SHUT_RDWR)
+      conn.close()  # will this error out?
       del recipients[i]
     except BlockingIOError:
       pass
@@ -37,7 +40,7 @@ def sendData(data, recipients):
 
 def doShutdown(sock, recipients):
   for conn, _ in recipients:
-    conn.shutdown(socket.SHUT_RDWR)
+    # conn.shutdown(socket.SHUT_RDWR)
     conn.close()
-  sock.shutdown(socket.SHUT_RD)  # this is just a listener socket, no writes
+  # sock.shutdown(socket.SHUT_RD)  # this is just a listener socket, no writes
   sock.close()
