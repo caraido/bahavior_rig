@@ -3,7 +3,7 @@ import socket
 import time
 import numpy as np
 import os
-from utils.tcp_utils import initTCP, getConnections, sendData
+from utils.tcp_utils import initTCP, getConnections, sendData, doShutdown
 
 BUFFER_TIME = .005  # time in seconds allowed for overhead
 
@@ -327,8 +327,7 @@ class AcquisitionObject:
       self.sleep(last_data_time)
       data, data_count = self.data_and_count
 
-    sock.shutdown(socket.SHUT_RDWR)
-    sock.close()
+    doShutdown(sock, recipients)
     self._has_displayer = False
 
   def run(self):
