@@ -35,11 +35,12 @@ def sendData(data, recipients):
     except (ConnectionAbortedError, ConnectionResetError):
       # conn.shutdown(socket.SHUT_RDWR)
       print(
-          f'Recipient {addr} disconnected from socket serving on {conn.getsockname}')
+          f'Recipient {addr} disconnected from socket serving on {conn.getsockname()}')
       conn.close()  # will this error out?
       del recipients[i]
     except BlockingIOError:
-      pass
+      print('BlockingIOError while trying to send data.')
+      # pass
 
 
 def doShutdown(sock, recipients):
