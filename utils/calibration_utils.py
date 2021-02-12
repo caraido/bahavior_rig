@@ -12,8 +12,9 @@ import ffmpeg
 import subprocess as sp
 import re
 
-CALIB_UPDATE_EACH = 3 # frame interval for calibration update
+CALIB_UPDATE_EACH = 3  # frame interval for calibration update
 GLOBAL_CONFIG_PATH = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig'
+
 
 def get_expected_corners(board):
   board_size = board.getChessboardSize()
@@ -165,7 +166,7 @@ def quick_calibrate(someCorners, someIds, board, width, height):
 
 
 class CharucoBoard:
-  def __init__(self, x, y, marker_size=0.8,type=None):
+  def __init__(self, x, y, marker_size=0.8, type=None):
     self.x = x
     self.y = y
     self.marker_size = marker_size
@@ -199,18 +200,19 @@ class CharucoBoard:
     return self._default_dictionary
 
   @default_dictionary.setter
-  def default_dictionary(self,type):
+  def default_dictionary(self, type):
     if type is None:
       self._default_dictionary = cv2.aruco.DICT_4X4_50
     elif type == 'intrinsic':
       self._default_dictionary = cv2.aruco.DICT_5X5_50
-    elif type == 'extrinsic' :
+    elif type == 'extrinsic':
       self._default_dictionary = cv2.aruco.DICT_4X4_50
     else:
       raise ValueError('wrong type')
 
   def save_board(self, img_size=1000):
-    file_name = 'charuco_board_shape_%dx%d_marker_size_%d_default_%d.png'%(self.x,self.y,self.marker_size,self.default_dictionary)
+    file_name = 'charuco_board_shape_%dx%d_marker_size_%d_default_%d.png' % (
+        self.x, self.y, self.marker_size, self.default_dictionary)
     img = self.board.draw((img_size, img_size))
     result = cv2.imwrite('./multimedia/board/' + file_name, img)
     if result:
@@ -235,7 +237,7 @@ class Calib:
     self.allIds = []
     self.config = None
 
-    self.charuco_board = CharucoBoard(x=self.x, y=self.y,type=self.type)
+    self.charuco_board = CharucoBoard(x=self.x, y=self.y, type=self.type)
     self.board = self.charuco_board.board
 
     self.max_size = get_expected_corners(self.board)
@@ -244,12 +246,12 @@ class Calib:
   def _get_type(self, calib_type):
     if calib_type == 'extrinsic':
       self.type = calib_type
-      self.x=6
-      self.y=2
+      self.x = 6
+      self.y = 2
     elif calib_type == 'intrinsic':
       self.type = calib_type
-      self.x=4
-      self.y=5
+      self.x = 4
+      self.y = 5
     else:
       raise ValueError("type can only be intrinsic or extrinsic!")
 
@@ -274,18 +276,18 @@ class Calib:
     return self._root_config_path
 
   @root_config_path.setter
-  def root_config_path(self,path):
+  def root_config_path(self, path):
     if path is not None:
       if os.path.exists(path):
         try:
-          os.mkdir(os.path.join(path,'config')) # is it needed?
+          os.mkdir(os.path.join(path, 'config'))  # is it needed?
         except:
           pass
-        self._root_config_path = os.path.join(path,'config')
+        self._root_config_path = os.path.join(path, 'config')
       else:
         raise FileExistsError("root file folder doens't exist!")
     else:
-      self._root_config_path=None
+      self._root_config_path = None
 
   # load configuration only for extrinsic calibration
   def load_ex_config(self, camera_serial_number):
@@ -296,7 +298,8 @@ class Calib:
     items = os.listdir(self.load_path)
     for item in items:
       if camera_serial_number in item and self.type in item:
-        path = os.path.join(self.load_path, 'config_%s_%d.toml'%(self.type, camera_serial_number))
+        path = os.path.join(self.load_path, 'config_%s_%d.toml' %
+                            (self.type, camera_serial_number))
         with open(path, 'r') as f:
           # there only should be only one calib file for each camera
           self.config = toml.load(f)
@@ -310,27 +313,28 @@ class Calib:
             print("Missing ids/corners/markers in the configuration file. Please check.")
 
   def save_config(self, camera_serial_number, width, height):
-    save_path = os.path.join(self.root_config_path, 'config_%s_%s.toml'%(self.type,camera_serial_number))
-    save_copy_path = self.load_path # overwrite
+    save_path = os.path.join(
+        self.root_config_path, 'config_%s_%s.toml' % (self.type, camera_serial_number))
+    save_copy_path = self.load_path  # overwrite
 
-    if 0: #os.path.exists(save_path):
-      #return 'Configuration file already exists.'
+    if 0:  # os.path.exists(save_path):
+      # return 'Configuration file already exists.'
       pass
     else:
       if self.type == "intrinsic":
         # time consuming
         param = quick_calibrate(self.allCorners,
-                                    self.allIds,
-                                    self.board,
-                                    width,
-                                    height)
+                                self.allIds,
+                                self.board,
+                                width,
+                                height)
         param['camera_serial_number'] = camera_serial_number
-        param['date'] = time.strftime("%Y-%m-%d-_%H:%M:%S",time.localtime())
+        param['date'] = time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())
         if len(param) > 2:
           with open(save_path, 'w') as f:
             toml.dump(param, f)
           # save a copy to the configuration folder. Overwrite the previous one
-          #with open(save_copy_path,'w') as f:
+          # with open(save_copy_path,'w') as f:
           #  toml.dump(param, f)
 
           return "intrinsic calibration configuration saved!"
@@ -341,17 +345,17 @@ class Calib:
           param = {'corners': np.array(self.allCorners),
                    'ids': np.array(self.allIds), 'CI': 5,
                    'camera_serial_number': camera_serial_number,
-                   'date': time.strftime("%Y-%m-%d-_%H:%M:%S",time.localtime())}
+                   'date': time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())}
           with open(save_path, 'w') as f:
             toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
-          with open(save_copy_path,'w') as f:
+          with open(save_copy_path, 'w') as f:
             toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
 
           return 'extrinsic calibration configuration saved!'
         else:
           return "failed to record all Ids! Can't save configuration. Please calibrate again."
 
-  def in_calibrate(self,frame,data_count):
+  def in_calibrate(self, frame, data_count):
     # write something on the frame
     # text = 'Intrinsic calibration mode On'
     # cv2.putText(frame, text, (50, 50),
@@ -376,141 +380,145 @@ class Calib:
 
       return {'corners': detectedCorners, 'ids': detectedIds}
     else:
-      return {'corners':[],'ids':[]}
+      return {'corners': [], 'ids': []}
 
-  def ex_calibrate2(self,frame, data_count):
+  def ex_calibrate2(self, frame, data_count):
     allDetected = False
-    if data_count % CALIB_UPDATE_EACH ==0:
+    if data_count % CALIB_UPDATE_EACH == 0:
       corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-        frame, self.board.dictionary, parameters=self.params)
+          frame, self.board.dictionary, parameters=self.params)
       detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
-        cv2.aruco.refineDetectedMarkers(frame, self.board, corners, ids,
-                                        rejectedImgPoints, parameters=self.params)
+          cv2.aruco.refineDetectedMarkers(frame, self.board, corners, ids,
+                                          rejectedImgPoints, parameters=self.params)
       # interpolate corners and draw corners
       if len(detectedCorners) > 0:
         rest, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
-          detectedCorners, detectedIds, frame, self.board)
-        #if detectedCorners is not None and 2 <= len(
+            detectedCorners, detectedIds, frame, self.board)
+        # if detectedCorners is not None and 2 <= len(
         #        detectedCorners) <= self.max_size:
-        if detectedCorners is not None and len(detectedCorners)==self.max_size+1:
-          self.allCorners=detectedCorners
-          self.allIds=detectedIds
-          allDetected=True
+        if detectedCorners is not None and len(detectedCorners) == self.max_size+1:
+          self.allCorners = detectedCorners
+          self.allIds = detectedIds
+          allDetected = True
 
-      return {'corners': detectedCorners, 'ids': detectedIds,'allDetected': allDetected}
+      return {'corners': detectedCorners, 'ids': detectedIds, 'allDetected': allDetected}
     else:
-      return {'corners': [], 'ids': [],'allDetected': allDetected}
+      return {'corners': [], 'ids': [], 'allDetected': allDetected}
 
 
-def ex_calibrate(self,frame,data_count):
+def ex_calibrate(self, frame, data_count):
     # if there isn't configuration on the screen, save corners and ids
-    allAligns = False  # TODO fix the logic here
-    if self.config is None:
+  allAligns = False  # TODO fix the logic here
+  if self.config is None:
       # text = 'No configuration file found. Performing initial extrinsic calibration... '
       # cv2.putText(frame, text, (50, 50),
       #             cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
       # calibrate every 3 frames
-      if data_count % 3 == 0:  # TODO: move to constant at top of file
+    if data_count % 3 == 0:  # TODO: move to constant at top of file
         # get parameters
-        params = self.params
+      params = self.params
 
-        # detect corners
-        corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
+      # detect corners
+      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
           frame, self.board.dictionary, parameters=params)
-        if ids is not None:
+      if ids is not None:
           # draw corners on the screen
           # cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
 
-          if len(ids) >= len(self.allIds):
-            self.allCorners = corners
-            self.allIds = ids
-    else:
-      # text = 'Found configuration file for this camera. Calibrating...'
-      # cv2.putText(frame, text, (50, 50),
-      #             cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+        if len(ids) >= len(self.allIds):
+          self.allCorners = corners
+          self.allIds = ids
+  else:
+    # text = 'Found configuration file for this camera. Calibrating...'
+    # cv2.putText(frame, text, (50, 50),
+    #             cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
 
-      if True:  # process['calibrator'].decimator % 3 == 0:
-        truecorners = self.config['corners']  # float numbers
-        trueids = self.config['ids']  # int numbers
-        CI = self.config['CI']  # int pixels
-        markers = self.config['markers']
+    if True:  # process['calibrator'].decimator % 3 == 0:
+      truecorners = self.config['corners']  # float numbers
+      trueids = self.config['ids']  # int numbers
+      CI = self.config['CI']  # int pixels
+      markers = self.config['markers']
 
-        # key step: detect markers
-        corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
+      # key step: detect markers
+      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
           frame, self.board.dictionary, parameters=self.params)
 
-        # make sure there are ids and markers and the number of ids is no less than 3
-        if check_ids(ids) and check_corners(corners):
+      # make sure there are ids and markers and the number of ids is no less than 3
+      if check_ids(ids) and check_corners(corners):
 
-          # check if aligned:
-          aligns, colors = get_align_color(
+        # check if aligned:
+        aligns, colors = get_align_color(
             ids, corners, trueids, truecorners, CI)
 
-          markers['aligns'] = pd.Series(
+        markers['aligns'] = pd.Series(
             aligns, index=list(map(str, reformat(ids))))
-          markers['colors'] = pd.Series(
+        markers['colors'] = pd.Series(
             colors, index=list(map(str, reformat(ids))))
 
-          # any way to make it more concise?
-          for tid, truecorner in zip(trueids, truecorners):
-            real_color = int(markers['colors'][tid]) if pd.notna(
+        # any way to make it more concise?
+        for tid, truecorner in zip(trueids, truecorners):
+          real_color = int(markers['colors'][tid]) if pd.notna(
               markers['colors'][tid]) else 200
-            point1 = tuple(np.array(truecorner[0], np.int))
-            point2 = tuple(np.array(truecorner[1], np.int))
-            point3 = tuple(np.array(truecorner[2], np.int))
-            point4 = tuple(np.array(truecorner[3], np.int))
-            cv2.line(frame, point1, point2, color=real_color, thickness=CI * 2)
-            cv2.line(frame, point2, point3, color=real_color, thickness=CI * 2)
-            cv2.line(frame, point3, point4, color=real_color, thickness=CI * 2)
-            cv2.line(frame, point4, point1, color=real_color, thickness=CI * 2)
-          # draw the detected markers on top of the true markers.
-          # cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
+          point1 = tuple(np.array(truecorner[0], np.int))
+          point2 = tuple(np.array(truecorner[1], np.int))
+          point3 = tuple(np.array(truecorner[2], np.int))
+          point4 = tuple(np.array(truecorner[3], np.int))
+          cv2.line(frame, point1, point2, color=real_color, thickness=CI * 2)
+          cv2.line(frame, point2, point3, color=real_color, thickness=CI * 2)
+          cv2.line(frame, point3, point4, color=real_color, thickness=CI * 2)
+          cv2.line(frame, point4, point1, color=real_color, thickness=CI * 2)
+        # draw the detected markers on top of the true markers.
+        # cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
 
-          allAligns = all(aligns)
-          #   text = 'Enough corners aligned! Ready to go'
-          #   cv2.putText(frame, text, (500, 1000),
-          #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-          # else:
-          #   text = "Missing ids or corners!"
-          #   cv2.putText(frame, text, (500, 1000),
-          #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-    return {'corners': corners, 'ids': ids, 'allAligns': allAligns}
+        allAligns = all(aligns)
+        #   text = 'Enough corners aligned! Ready to go'
+        #   cv2.putText(frame, text, (500, 1000),
+        #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+        # else:
+        #   text = "Missing ids or corners!"
+        #   cv2.putText(frame, text, (500, 1000),
+        #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+  return {'corners': corners, 'ids': ids, 'allAligns': allAligns}
 
 # for all cameras
+
+
 def undistort_videos(rootpath):
   raw_items = os.listdir(rootpath)
-  config_path = os.path.join(rootpath,'config')
+  config_path = os.path.join(rootpath, 'config')
   items = os.listdir(config_path)
-  processed_path = os.path.join(rootpath,'processed')
+  processed_path = os.path.join(rootpath, 'processed')
 
   intrinsics = None
   for item in items:
     if 'intrinsic' in item:
-      serial_number = re.findall("\d+",item)[0]
-      with open(os.path.join(config_path,item),'r') as f:
+      serial_number = re.findall("\d+", item)[0]
+      with open(os.path.join(config_path, item), 'r') as f:
         intrinsics = toml.load(f)
       width = intrinsics['width']
       height = intrinsics['height']
       mtx = np.array(intrinsics['camera_mat'])
       dist = np.array(intrinsics['dist_coeff'])
       resolution = (width, height)
-      newcameramtx, roi = cv2.getOptimalNewCameraMatrix(mtx, dist, resolution, 1, resolution)
+      newcameramtx, roi = cv2.getOptimalNewCameraMatrix(
+          mtx, dist, resolution, 1, resolution)
 
       movie = [a for a in raw_items if serial_number in a and '.MOV' in a]
-      movie_path = os.path.join(rootpath,movie[0])
+      movie_path = os.path.join(rootpath, movie[0])
 
       # TODO: frame rate needs to coordinate with raw video
       video_writer = ffmpeg \
-        .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{width}x{height}', framerate=30) \
-        .output(os.path.join(processed_path,'undistorted_'+movie[0]), vcodec='libx265') \
-        .overwrite_output() \
-        .run_async(pipe_stdin=True)
+          .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{width}x{height}', framerate=30) \
+          .output(os.path.join(processed_path, 'undistorted_'+movie[0]), vcodec='libx265') \
+          .overwrite_output() \
+          .run_async(pipe_stdin=True)
+      # TODO: switch to quiet mode, see Camera.open_file
 
       cap = cv2.VideoCapture(movie_path)
-      ret =True
+      ret = True
       while ret:
-        ret,frame=cap.read()
+        ret, frame = cap.read()
         if ret:
           gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
           dst = cv2.undistort(gray, mtx, dist, None, newcameramtx)
@@ -522,11 +530,13 @@ def undistort_videos(rootpath):
   return intrinsics
 
 # only for top camera
+
+
 def undistort_markers(rootpath):
   config_path = os.path.join(rootpath, 'config')
   items = os.listdir(config_path)
-  if not os.path.exists(os.path.join(rootpath,'processed')):
-    os.mkdir(os.path.join(rootpath,'processed'))
+  if not os.path.exists(os.path.join(rootpath, 'processed')):
+    os.mkdir(os.path.join(rootpath, 'processed'))
 
   intrinsics = [a for a in items if 'intrinsic' in a]
 
@@ -534,22 +544,22 @@ def undistort_markers(rootpath):
     serial_number = re.findall("\d+", intrinsic)[0]
     # find top camera
     if serial_number == '17391304':
-      with open(os.path.join(config_path,intrinsic),'r') as f:
+      with open(os.path.join(config_path, intrinsic), 'r') as f:
         in_config = toml.load(f)
 
       mtx = np.array(in_config['camera_mat'])
       dist = np.array(in_config['dist_coeff'])
 
-      with open(os.path.join(config_path,'config_extrinsic_%s.toml'%serial_number),'r') as f:
+      with open(os.path.join(config_path, 'config_extrinsic_%s.toml' % serial_number), 'r') as f:
         ex_config = toml.load(f)
-      corners=np.array(ex_config['corners'])
+      corners = np.array(ex_config['corners'])
       shape = corners.shape
-      new_corners=[]
+      new_corners = []
       for i in range(shape[0]):
-        new_corner = cv2.undistortPoints(corners[i],mtx,dist,P=mtx)
+        new_corner = cv2.undistortPoints(corners[i], mtx, dist, P=mtx)
         new_corners.append(new_corner)
-      undistort_corners=np.swapaxes(np.array(new_corners),1,2).tolist()
+      undistort_corners = np.swapaxes(np.array(new_corners), 1, 2).tolist()
       new_item = {'undistorted_corners': undistort_corners}
 
-      with open(os.path.join(config_path, 'config_extrinsic_%s.toml'%serial_number), 'a') as f:
-        toml.dump(new_item,f)
+      with open(os.path.join(config_path, 'config_extrinsic_%s.toml' % serial_number), 'a') as f:
+        toml.dump(new_item, f)
