@@ -327,6 +327,7 @@ class AcquisitionObject:
       self.sleep(last_data_time)
       data, data_count = self.data_and_count
 
+    sock.shutdown(socket.SHUT_RDWR)
     sock.close()
     self._has_displayer = False
 
