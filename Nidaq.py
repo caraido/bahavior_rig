@@ -60,7 +60,7 @@ class Nidaq(AcquisitionObject):
     self.trigger_task.control(nidaqmx.constants.TaskMode.TASK_COMMIT)
 
     self._log_mode = [False, False]  # [isLogging, isDisplaying]
-    self._filepath = ''
+    # self._filepath = ''
 
   def parse_settings(self, spectrogram_settings):
     self._nfft = int(spectrogram_settings['frequency resolution'].current)
@@ -86,10 +86,12 @@ class Nidaq(AcquisitionObject):
 
     self._freq_correct = spectrogram_settings['noise correction'].current
 
-  def open_file(self, fileObj):
+  def open_file(self, filePath):
     self._log_mode[0] = True
-    self._filepath = fileObj
-    return fileObj
+    # NOTE: whatever we return here becomes self.file
+    # return os.path.join(filePath, 'nidaq.tdms')
+    print(f'Saving nidaq data to {filePath}')
+    return filePath
 
   def prepare_display(self):
     self._log_mode[1] = True
@@ -104,7 +106,7 @@ class Nidaq(AcquisitionObject):
       log_mode = nidaqmx.constants.LoggingMode.OFF
 
     self.audio_task.in_stream.configure_logging(
-        self._filepath,
+        self.file,
         logging_mode=log_mode,
         operation=nidaqmx.constants.LoggingOperation.CREATE_OR_REPLACE)  # see nptdms
 

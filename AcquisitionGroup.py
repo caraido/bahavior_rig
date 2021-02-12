@@ -45,8 +45,7 @@ class AcquisitionGroup:
       self.filepaths = [None] * self.nChildren
     if not isDisplayed:
       isDisplayed = [False] * self.nChildren
-
-    if not isinstance(isDisplayed, list) or len(isDisplayed) == 1:
+    elif not isinstance(isDisplayed, list) or len(isDisplayed) == 1:
       # TODO: does this work? what if isDisplayed = [True]?
       # wouldn't we then get [[True], [True], [True], ...] ?
       isDisplayed = [isDisplayed] * self.nChildren
@@ -127,6 +126,7 @@ class AcquisitionGroup:
       except:
         Warning("Post analysis failed. Have to do it manually.")
     # ProcessGroup takeover?
+    print('finished AcquisitionGroup.stop()')
 
   def __del__(self):
     del self.children
