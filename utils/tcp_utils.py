@@ -32,7 +32,7 @@ def getConnections(sock, recipients, block=True):
 def sendData(data, recipients):
   for i, (conn, addr) in reversed(list(enumerate(recipients))):
     try:
-      conn.send(data)
+      conn.sendall(data)
     except (ConnectionAbortedError, ConnectionResetError):
       # conn.shutdown(socket.SHUT_RDWR)
       print(
