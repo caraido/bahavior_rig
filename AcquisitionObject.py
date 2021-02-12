@@ -283,8 +283,6 @@ class AcquisitionObject:
 
   def wait_for(self):
     while self._has_runner or self._has_processor or self._has_displayer:
-      print(
-          f'AcqObj has runner? {self._has_runner}. has processor? {self._has_processor}. has displayer? {self._has_displayer}. Pausing.')
       check_time = time.time()
       self.sleep(check_time)
 
@@ -317,9 +315,10 @@ class AcquisitionObject:
       # NOTE: I don't love how when we have no recipients we keep requesting the data anyways
       # that's why I elected to check if self._data is none instead
       # we don't have the thread lock but should be okay for just reading None status?
+      print('data was not none')
 
       if len(recipients) == 0:
-        self.sleep(last_data_time)
+        self.sleep(time.time())
         getConnections(sock, recipients, block=False)
 
       elif data_count > last_count:
