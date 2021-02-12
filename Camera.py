@@ -126,7 +126,9 @@ class Camera(AcquisitionObject):
         .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}', framerate=self.run_rate) \
         .output(filepath, vcodec='libx265') \
         .overwrite_output() \
-        .run_async(pipe_stdin=True)
+        .global_args('-loglevel', 'error') \
+        .run_async(pipe_stdin=True, quiet=True)
+    # .run_async(pip_stdin=True)
 
   def close_file(self, fileObj):
     fileObj.stdin.close()
