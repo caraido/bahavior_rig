@@ -150,6 +150,7 @@ class Nidaq(AcquisitionObject):
     interpSpect -= thisMin
 
     thisMax = np.amax(interpSpect, axis=(0, 1))
+    print(f'spectrogram maximum: {thisMax}')
 
     interpSpect /= thisMax  # normalized to [0,1]
 
