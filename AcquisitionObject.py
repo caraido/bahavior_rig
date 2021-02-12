@@ -298,7 +298,7 @@ class AcquisitionObject:
 
     self._has_displayer = True
 
-    last_count = 0
+    last_count = -1
     try:
       data, data_count = self.data_and_count
     except:
