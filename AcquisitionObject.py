@@ -318,7 +318,6 @@ class AcquisitionObject:
       # NOTE: I don't love how when we have no recipients we keep requesting the data anyways
       # that's why I elected to check if self._data is none instead
       # we don't have the thread lock but should be okay for just reading None status?
-      print('data was not none')
 
       if len(recipients) == 0:
         self.sleep(time.time())
@@ -336,10 +335,9 @@ class AcquisitionObject:
         self.sleep(last_data_time)
         data, data_count = self.data_and_count
 
-    print('Data was none. Exiting.')
-
     doShutdown(sock, recipients)
     self._has_displayer = False
+    print('exiting displayer.')
 
   def run(self):
     print('started child run')
