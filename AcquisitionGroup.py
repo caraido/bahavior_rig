@@ -17,8 +17,8 @@ class AcquisitionGroup:
     self.nCameras = self._camlist.GetSize()
     self.cameras = [Camera(self._camlist, i, status['frame rate'].current, (hostname, status[f'camera {i}'].current['port'].current))
                     for i in range(self.nCameras)]
-    self.nidaq = Nidaq(status['frame rate'].current, status['sample frequency'].current,
-                       status['read rate'].current, status['spectrogram'].current, hostname)
+    self.nidaq = Nidaq(status['frame rate'].current,
+                       status['sample frequency'].current, status['spectrogram'].current, hostname)
     self.children = self.cameras + [self.nidaq]
     self.nChildren = self.nCameras + 1
 
