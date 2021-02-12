@@ -28,6 +28,16 @@ def sendData(data, recipients):
     try:
       conn.send(data)
     except (ConnectionAbortedError, ConnectionResetError):
+      conn.shutdown(socket.SHUT_RDWR)  # will this error out?
+      conn.close()
       del recipients[i]
     except BlockingIOError:
       pass
+
+
+def doShutdown(sock, recipients):
+  for conn, _ in recipients:
+    conn.shutdown(socket.SHUT_RDWR)
+    conn.close()
+  sock.shutdown(socket.SHUT_RDWR)
+  sock.close()
