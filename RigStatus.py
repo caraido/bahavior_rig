@@ -1,14 +1,14 @@
 class RigStatusItem:
   def __init__(self, value):
     # print(f'initing rsv: {value}')
-    if type(value['current']) is dict:
+    if isinstance(value['current'], dict):
       self._allowed = []  # TODO: placeholder for nested dict...
       self._current = {k: RigStatusItem(v)
                        for k, v in value['current'].items()}
     elif 'allowedValues' in value.keys():
       self._allowed = value['allowedValues']
       self._current = value['current']
-    elif type(value['current'] is bool):
+    elif isinstance(value['current'], bool):
       self._allowed = (True, False)
       self._current = value['current']
 
@@ -39,7 +39,7 @@ class RigStatusItem:
     if not self._mutable:
       raise Exception('Couldn\'t set status')
 
-    if type(self._current) is dict:
+    if isinstance(self._current, dict):
       current = self._current.copy()
       try:
         print(f'goal: {state}')
@@ -57,14 +57,14 @@ class RigStatusItem:
 
   @property
   def allowed(self):
-    if type(self._current) is dict:
+    if isinstance(self._current, dict):
       return {'allowedValues': self._allowed, 'category': self._category, 'current': {k: v.allowed for k, v in self._current.items()}, 'mutable': self._mutable}
     else:
       return {'allowedValues': self._allowed, 'category': self._category, 'current': self._current, 'mutable': self._mutable}
 
   @property
   def update(self):
-    if type(self._current) is dict:
+    if isinstance(self._current, dict):
       return {'current': {k: v.update for k, v in self._current.items()}, 'mutable': self._mutable}
     else:
       return {'current': self._current, 'mutable': self._mutable}

@@ -109,7 +109,9 @@ class AcquisitionGroup:
     # self.nidaq.stop()  # make sure cameras are stopped before stopping triggers
     for child in self.children:
       child.stop()
+    print('stopped children')
     for child in self.children:
+      print('waiting for next child')
       child.wait_for()
     #del self.children
     # self._processors = [None] * self.nChildren
