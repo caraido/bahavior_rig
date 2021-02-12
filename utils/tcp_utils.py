@@ -20,7 +20,8 @@ def getConnections(sock, recipients, block=True):
     try:
       conn, addr = sock.accept()
       recipients.append((conn, addr))
-      print(f'Added recipient {addr} to socket serving on {sock.getsockname()}')
+      print(
+          f'Added recipient {addr} to socket serving on {sock.getsockname()}')
     except BlockingIOError:
       pass
 

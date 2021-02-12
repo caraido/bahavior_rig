@@ -310,10 +310,8 @@ class AcquisitionObject:
     recipients = []
     sock = initTCP(self.address)
 
-    # getConnections(sock, recipients, block=True)
-
     while self._data is not None:
-      # NOTE: I don't love how when we have no recipients we keep requesting the data anyways
+      # NOTE: I don't love how when we have no recipients we keep requesting the data anyways.
       # that's why I elected to check if self._data is none instead
       # we don't have the thread lock but should be okay for just reading None status?
 
@@ -326,6 +324,7 @@ class AcquisitionObject:
         last_count = data_count
 
         data = self.predisplay(data)  # do any additional frame workup
+        print(f'datashape: {data.shape}')
 
         getConnections(sock, recipients, block=False)  # check for new clients
         sendData(data.astype(np.uint8).tobytes(), recipients)
