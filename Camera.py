@@ -105,7 +105,11 @@ class Camera(AcquisitionObject):
   def capture(self, data):
     while True:
       # get the image from spinview
-      im = self._spincam.GetNextImage(FRAME_TIMEOUT)
+      try:
+        im = self._spincam.GetNextImage(FRAME_TIMEOUT)
+      except PySpin.SpinnakerException as e:
+        print(f'Error in spinnaker: {e}. Assumed innocuous.')
+
       if im.IsIncomplete():
         status = im.GetImageStatus()
         im.Release()

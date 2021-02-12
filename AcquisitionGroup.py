@@ -63,7 +63,6 @@ class AcquisitionGroup:
     self.started = True
 
   def run(self):
-    print('called ag.run')
     # begin gathering samples
     # if not self._runners:  # if self._runners == []
     #   for i, child in enumerate(self.children):
@@ -78,17 +77,15 @@ class AcquisitionGroup:
       if self._runners[i] is None or not self._runners[i].is_alive():
         self._runners[i] = threading.Thread(target=child.run)
         self._runners[i].start()
-        print(f'started child {i} runner')
       if self._displayers[i] is None or not self._displayers[i].is_alive():
         self._displayers[i] = threading.Thread(target=child.display)
         self._displayers[i].start()
-        print(f'started child {i} displayer')
     self.running = True
     #
     #       # if not self._runners[-1].is_alive():
     #       #   self._runners[-1] = threading.Thread(target=self.nidaq.run)
     #   self._runners[-1].start()
-    print('finished ag.run')
+    print('finished AcquisitionGroup.run')
 
   def process(self, i, options):
     # if it's recording, process() shouldn't be run. except dlc
