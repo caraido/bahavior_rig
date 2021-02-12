@@ -21,13 +21,13 @@ class Nidaq(AcquisitionObject):
   # def __init__(self, frame_rate, audio_settings):
     # Nidaq(status['frame_rate'].current, status['sample frequency'].current,
     #  status['read rate'].current, status['spectrogram'].current)
-  def __init__(self, frame_rate, sample_rate, spectrogram_settings, hostname):
+  def __init__(self, frame_rate, sample_rate, spectrogram_settings, address):
     self.sample_rate = int(sample_rate)
 
     self.parse_settings(spectrogram_settings)
 
     AcquisitionObject.__init__(
-        self, self.run_rate, (int(self.sample_rate // self.run_rate), 1), (hostname, spectrogram_settings['port'].current))
+        self, self.run_rate, (int(self.sample_rate // self.run_rate), 1), address)
 
     # TODO: verify that we are not violating the task state model: https://zone.ni.com/reference/en-XX/help/370466AH-01/mxcncpts/taskstatemodel/
     # specifically, if we change logging mode, do we need to re-commit the task??
