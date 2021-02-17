@@ -1,8 +1,6 @@
 import deeplabcut
 import os
-from utils.geometry_utils import Config, get_r_pixel, get_board_side_length_pixel,Gaze_angle
-import pandas as pd
-import numpy as np
+from utils.geometry_utils import Gaze_angle
 
 
 def dlc_analysis(root_path, dlc_config_path):
@@ -20,7 +18,8 @@ def dlc_analysis(root_path, dlc_config_path):
 							  [movie_path],
 							  save_as_csv=True,
 							  videotype='mov',
-							  shuffle=1)
+							  shuffle=1,
+							  gputouse=0)
 	deeplabcut.create_labeled_video(dlc_config_path,
 									[movie_path],
 									save_frames=False,

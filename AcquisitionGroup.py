@@ -4,6 +4,7 @@ import os
 import threading
 from Camera import Camera
 from Nidaq import Nidaq
+from Mic import Mic
 
 import ProcessingGroup as pg
 # import RigStatus
@@ -15,16 +16,20 @@ class AcquisitionGroup:
     self._system = PySpin.System.GetInstance()
     self._camlist = self._system.GetCameras()
     self.nCameras = self._camlist.GetSize()
-    self.nChildren = self.nCameras + 1
+    # +1: Nidaq. +2: Nidaq+Mic
+    self.nChildren = self.nCameras + 2
     if not isinstance(ports, list):
       ports = [ports + i for i in range(self.nChildren)]
 
     self.cameras = [Camera(self._camlist, i, status['frame rate'].current, (hostname, ports[i]))
                     for i in range(self.nCameras)]
+    self.mic=Mic(status['sample frequency'].current, status['spectrogram'].current, (
+                           hostname, ports[-2]))
     self.nidaq = Nidaq(status['frame rate'].current,
                        status['sample frequency'].current, status['spectrogram'].current, (
                            hostname, ports[-1]))
-    self.children = self.cameras + [self.nidaq]
+
+    self.children = self.cameras + [self.mic]+ [self.nidaq]
 
     self._processors = [None] * self.nChildren
     self._runners = [None] * self.nChildren
@@ -56,9 +61,13 @@ class AcquisitionGroup:
 
     print('detected %d cameras' % self.nCameras)
 
-    for child, fp, disp in zip(self.children, self.filepaths[: -1], isDisplayed[: -1]):
+    for child, fp, disp in zip(self.cameras, self.filepaths[: -2], isDisplayed[: -2]):
       child.start(filepath=fp, display=disp)
       print('started camera ' + child.device_serial_number)
+
+    # start mic
+    self.mic.start(filepath=self.filepaths[-2], display=isDisplayed[-2])
+    print('started mic')
 
     # once the camera BeginAcquisition methods are called, we can start triggering
     self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
@@ -82,8 +91,9 @@ class AcquisitionGroup:
         self._runners[i] = threading.Thread(target=child.run)
         self._runners[i].start()
       if self._displayers[i] is None or not self._displayers[i].is_alive():
-        self._displayers[i] = threading.Thread(target=child.display)
-        self._displayers[i].start()
+        if i != 6: # temporaray solution for not displaying nidaq spectrogram
+          self._displayers[i] = threading.Thread(target=child.display)
+          self._displayers[i].start()
     self.running = True
     #
     #       # if not self._runners[-1].is_alive():
@@ -116,7 +126,7 @@ class AcquisitionGroup:
     self.processing = False
     self.running = False
     self.started = False
-
+    '''
     if self.filepaths is not None and any(self.filepaths):
       rootpath = os.path.split(self.filepaths[0])[0]
       self.pg(rootpath)
@@ -126,8 +136,13 @@ class AcquisitionGroup:
         self.post_analysis.start()
       except:
         Warning("Post analysis failed. Have to do it manually.")
-    # ProcessGroup takeover?
+        '''
+
     print('finished AcquisitionGroup.stop()')
+  def restart(self, filepaths=None, isDisplayed=True):
+    self.stop()
+    self.start(filepaths, isDisplayed)
+    self.run()
 
   def __del__(self):
     del self.children

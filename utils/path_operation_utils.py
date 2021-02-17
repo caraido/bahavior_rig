@@ -77,8 +77,12 @@ def reformat_filepath(path,name,camera:list):
 		camera_filepath = os.path.join(full_path,'camera_%s.MOV'%serial_number)
 		filepaths.append(camera_filepath)
 
-	audio_filepath = os.path.join(full_path,'audio.tdms')
+	mic_filepath=os.path.join(full_path,'Dodo_audio.tdms')
+	filepaths.append(mic_filepath)
+
+	audio_filepath = os.path.join(full_path,'B&K_audio.tdms')
 	filepaths.append(audio_filepath)
+
 	return filepaths
 
 def copy_config(filepath):

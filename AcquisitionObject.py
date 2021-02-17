@@ -105,9 +105,11 @@ class AcquisitionObject:
     # self._has_filepath = False
     self._has_displayer = False
 
-    self.address = address
 
     # self.filepath = None
+    self.address = address
+    self._sock = initTCP(address)  # TODO: move elsewhere
+    self._recipients = []
 
   @property
   def running(self):
@@ -307,17 +309,15 @@ class AcquisitionObject:
 
     last_data_time = time.time()
 
-    recipients = []
-    sock = initTCP(self.address)
 
     while self._data is not None:
       # NOTE: I don't love how when we have no recipients we keep requesting the data anyways.
       # that's why I elected to check if self._data is none instead
       # we don't have the thread lock but should be okay for just reading None status?
 
-      if len(recipients) == 0:
+      if len(self._recipients) == 0:
         self.sleep(time.time())
-        getConnections(sock, recipients, block=False)
+        getConnections(self._sock, self._recipients, block=False)
       else:
         self.sleep(last_data_time)
         data, data_count = self.data_and_count
@@ -328,10 +328,9 @@ class AcquisitionObject:
 
         data = self.predisplay(data)  # do any additional frame workup
 
-        getConnections(sock, recipients, block=False)  # check for new clients
-        sendData(data.astype(np.uint8).tobytes(), recipients)
+        getConnections(self._sock, self._recipients, block=False)  # check for new clients
+        sendData(data.astype(np.uint8).tobytes(), self._recipients)
 
-    doShutdown(sock, recipients)
     self._has_displayer = False
 
   def run(self):
@@ -411,4 +410,5 @@ class AcquisitionObject:
   def __del__(self):
     self.stop()
     self.wait_for()
+    doShutdown(self._sock, self._recipients)
     self.close()
