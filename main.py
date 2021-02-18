@@ -1,8 +1,8 @@
 # from setup import setup
 # from callbacks import initCallbacks
+import sys
 from socketApp import initServer
 
-import sys
 
 # from threading import Thread
 

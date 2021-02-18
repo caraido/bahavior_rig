@@ -39,8 +39,7 @@ def initServer(status):
       status[k](v)
 
     # optional: send a string message to all clients that gets displayed on the gui
-    emit('message', 'Recording started.')
-    # 'Requested change: ' + str(update), broadcast=True)
+    emit('message', 'Requested change: ' + str(update), broadcast=True)
 
     # send the new status to all other clients as a 'broadcast' event
     emit('broadcast', status.update, broadcast=True, include_self=False)
