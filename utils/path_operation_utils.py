@@ -8,6 +8,7 @@ saving_path_prefix = 'D:\\'
 default_saving_path= 'Desktop'
 default_folder_name = 'Testing'
 global_config_path = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
+global_log_path=r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\log'
 
 @property
 def get_saving_path_prefix():
@@ -101,6 +102,55 @@ def load_config(filepath):
 	for config in configs:
 		data[config]=toml.load(os.path.join(local_config_path,config))
 	return data
+
+
+def save_notes(content:str, save_paths):
+	# make temporary directory if not exist
+	if not os.path.exists(global_log_path):
+		os.makedirs(global_log_path)
+
+	# record the time stamp
+	date = time.strftime("%Y-%m-%d_[%H:%M:%S]", time.localtime())
+
+	temp_file_name = 'temp_log.txt'
+	temp_file = os.path.join(global_log_path, temp_file_name)
+	file_name = 'log.txt'
+
+	if not any(save_paths):
+		if len(content)!=0:
+			with open(temp_file,'w') as f:
+				f.write(date+':\n'+content+'\n')
+			print('saved the log')
+	else:
+		root_file_path = os.path.split(save_paths[0])[0]
+		file = os.path.join(root_file_path, file_name)
+
+		if len(content)!=0:
+			after_recording_content=date+':\n'+content+'\n'
+			if os.path.exists(temp_file):
+				with open(temp_file,'r') as f:
+					before_recording_note=f.read()
+				entire_note=before_recording_note+after_recording_content
+			else:
+				entire_note=after_recording_content
+		else:
+			if os.path.exists(temp_file):
+				with open(temp_file,'r') as f:
+					before_recording_note=f.read()
+				entire_note=before_recording_note
+			else:
+				entire_note=''
+
+		with open(file, 'w') as f:
+			f.write(entire_note)
+		print('saved the log')
+
+		try:
+			os.remove(temp_file)
+		except OSError(" can't delete"):
+			pass
+
+
 
 
 
