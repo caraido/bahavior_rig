@@ -103,7 +103,7 @@ class AcquisitionGroup:
 
   def process(self, i, options):
     # if it's recording, process() shouldn't be run. except dlc
-    if not any(self.filepaths) or options['mode'] == 'DLC':
+    if not any(self.filepaths) or options == 'DLC':
       if self._processors[i] is None or not self._processors[i].is_alive():
         self.children[i].processing = options
         self._processors[i] = threading.Thread(

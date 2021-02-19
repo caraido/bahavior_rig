@@ -139,8 +139,8 @@ initialStatus = {  # just an example
             'calibration type': {
                 'category': 'Video',
                 'mutable': True,
-                'current': 'Intrinsic',
-                'allowedValues': ['Intrinsic', 'Extrinsic']
+                'current': 'intrinsic',
+                'allowedValues': ['intrinsic', 'alignment','extrinsic']
             }
         }
     }

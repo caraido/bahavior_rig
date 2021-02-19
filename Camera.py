@@ -192,18 +192,20 @@ class Camera(AcquisitionObject):
           draw_dots(frame, results)
         else:
           cv2.putText(frame, f"Performing {process['mode']} calibration", (50, 50),
-                      cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 125), 2)
+                      cv2.FONT_HERSHEY_PLAIN, 4.0, (255, 0, 125), 2)
 
-          cv2.aruco.drawDetectedMarkers(
-              frame, results['corners'], results['ids'], borderColor=225)
+          corners=results['corners']
+          if len(corners)!=0:
+            cv2.aruco.drawDetectedMarkers(
+                frame, results['corners'], results['ids'], borderColor=225)
 
           if process['mode'] == 'extrinsic':
             if process['calibrator'].config is None:
               text = 'No configuration file found. Performing initial extrinsic calibration... '
             else:
               text = 'Found configuration file for this camera. Calibrating...'
-            cv2.putText(frame, text, (50, 60),
-                        cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+            cv2.putText(frame, text, (50, 80),
+                        cv2.FONT_HERSHEY_PLAIN, 2.0, (255, 0, 255), 2)
 
             '''
             if results['allAligns']:
@@ -212,13 +214,13 @@ class Camera(AcquisitionObject):
               text="Missing ids or corners!"
             '''
 
-            if results['allDectected']:
+            if results['allDetected']:
               text = 'Enough corners detected! Ready to go'
             else:
               text = "Not enough corners! Please adjust the camera"
 
             cv2.putText(frame, text, (500, 1000),
-                        cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
+                        cv2.FONT_HERSHEY_PLAIN, 2.0, (255, 0, 255), 2)
 
     if self.file is not None:
       text = 'recording...'

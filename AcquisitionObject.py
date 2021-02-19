@@ -280,9 +280,10 @@ class AcquisitionObject:
 
   def stop(self):
     self.running = False
+    self.processing = None
     self.file = None
     self.data = False
-    self.processing = None
+
 
   def wait_for(self):
     while self._has_runner or self._has_processor or self._has_displayer:
@@ -391,8 +392,6 @@ class AcquisitionObject:
             self._processing = process
         else:
           self._has_processor = False
-          # TODO: return what?
-
           return
 
       # buffer the current data

@@ -1,7 +1,9 @@
 # from setup import ag, status
 from utils import path_operation_utils as pop
 
+serialNumbers=[19287342,19412282,17391304,17391290]
 def initCallbacks(ag, status):
+
   def initialization(state):
     if state == 'initialized':
       ag.start()  # need the filepaths here for the temp videos?
@@ -59,19 +61,24 @@ def initCallbacks(ag, status):
 
   def calibration(state):
 
-    # state['is calibrating'].current
-    # state['camera serial number'].current
-    # state['type'].current == 'Intrinsic'
+    if state['is calibrating']:
+      #TODO: start calibrating in background thread
+      # state['camera serial number'].current #gives the current camera SN
+      # state['type'].current == 'Intrinsic' #intrinsice or extrinsic?
 
-    # must be background thread
-    # Threading.thread(ag.cameras[cameraId].doCalibration(intrinsicOrExtrinsic)
-
-    if state == 'calibrating':
       status['initialization'].immutable()
-      status['calibration'].immutable()
+
+      cam_id=state['camera serial number']
+      cam_num=serialNumbers.index(cam_id)
+      type = state['calibration type']
+      process={'mode':type}
+      ag.process(cam_num,options=process)
+
     else:
+      ag.stop()
+      ag.start()
+      ag.run()
       status['initialization'].mutable()
-      status['calibration'].mutable()
 
   status['calibration'].callback(calibration)
 
