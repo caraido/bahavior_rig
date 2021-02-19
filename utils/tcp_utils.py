@@ -39,8 +39,8 @@ def sendData(data, recipients):
           f'Recipient {addr} disconnected from socket serving on {conn.getsockname()}')
       conn.close()  # will this error out?
       del recipients[i]
-    except BlockingIOError:
-      print('BlockingIOError while trying to send data.')
+    # except BlockingIOError:
+    #   print('BlockingIOError while trying to send data.')
       # pass
 
 

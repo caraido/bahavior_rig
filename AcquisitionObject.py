@@ -105,7 +105,6 @@ class AcquisitionObject:
     # self._has_filepath = False
     self._has_displayer = False
 
-
     # self.filepath = None
     self.address = address
     self._sock = initTCP(address)  # TODO: move elsewhere
@@ -284,7 +283,6 @@ class AcquisitionObject:
     self.file = None
     self.data = False
 
-
   def wait_for(self):
     while self._has_runner or self._has_processor or self._has_displayer:
       check_time = time.time()
@@ -310,7 +308,6 @@ class AcquisitionObject:
 
     last_data_time = time.time()
 
-
     while self._data is not None:
       # NOTE: I don't love how when we have no recipients we keep requesting the data anyways.
       # that's why I elected to check if self._data is none instead
@@ -329,9 +326,12 @@ class AcquisitionObject:
 
         data = self.predisplay(data)  # do any additional frame workup
 
-        getConnections(self._sock, self._recipients, block=False)  # check for new clients
-        sendData(data.astype(np.uint8).tobytes(), self._recipients)
-
+        getConnections(self._sock, self._recipients,
+                       block=False)  # check for new clients
+        try:
+          sendData(data.astype(np.uint8).tobytes(), self._recipients)
+        except BlockingIOError:
+          print(f'BlockingIOError on sendData() at address {self.address}')
     self._has_displayer = False
 
   def run(self):
