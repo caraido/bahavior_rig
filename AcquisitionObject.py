@@ -328,10 +328,7 @@ class AcquisitionObject:
 
         getConnections(self._sock, self._recipients,
                        block=False)  # check for new clients
-        try:
-          sendData(data.astype(np.uint8).tobytes(), self._recipients)
-        except BlockingIOError:
-          print(f'BlockingIOError on sendData() at address {self.address}')
+        sendData(data.astype(np.uint8).tobytes(), self._recipients)
     self._has_displayer = False
 
   def run(self):

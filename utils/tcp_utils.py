@@ -31,20 +31,22 @@ def getConnections(sock, recipients, block=True):
 
 def sendData(data, recipients):
   for i, (conn, addr) in reversed(list(enumerate(recipients))):
-    bytes_sent = 0
-    bytes_to_send = len(data)
+    # bytes_sent = 0
+    # bytes_to_send = len(data)
     try:
-      while bytes_sent < bytes_to_send:
-        bytes_sent += conn.send(data[bytes_sent:])
+      # while bytes_sent < bytes_to_send:
+      #   bytes_sent += conn.send(data[bytes_sent:])
+      conn.send(data)
     except (ConnectionAbortedError, ConnectionResetError):
       # conn.shutdown(socket.SHUT_RDWR)
       print(
           f'Recipient {addr} disconnected from socket serving on {conn.getsockname()}')
       conn.close()  # will this error out?
       del recipients[i]
-    # except BlockingIOError:
-    #   print('BlockingIOError while trying to send data.')
-      # pass
+    except BlockingIOError:
+      print('BlockingIOError while trying to send data. Disconnecting recipient')
+      conn.close()
+      del recipients[i]
 
 
 def doShutdown(sock, recipients):
