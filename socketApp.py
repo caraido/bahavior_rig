@@ -19,7 +19,7 @@ def initServer(ag, status):
 
   @socketio.on('disconnect')
   def handle_closed_connection():
-    pass
+    ag.print = print
 
   @socketio.on('get')
   def parse_request(request_type):
