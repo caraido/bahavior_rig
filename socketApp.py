@@ -19,7 +19,7 @@ def initServer(ag, status):
 
   @socketio.on('disconnect')
   def handle_closed_connection():
-    ag.print = print
+    ag.print = print  # TODO: only if the number of connections is now zero!
 
   @socketio.on('get')
   def parse_request(request_type):
