@@ -6,8 +6,10 @@ def initServer(ag, status):
   app = Flask(__name__)
   socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
 
-  def printToGUI(message):
-    socketio.emit('message', message, broadcast=True)
+  def printToGUI(*args):
+    socketio.emit('message', ' '.join([str(arg)
+                                       for arg in args]), broadcast=True)
+    print(*args)
 
   @socketio.on('connect')
   def handle_new_connection():

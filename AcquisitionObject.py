@@ -405,8 +405,8 @@ class AcquisitionObject:
         os.rmdir(os.path.join(root, name))
     os.rmdir(path)
 
-  def print(self, message):
-    self.parent.print(message)
+  def print(self, *args):
+    self.parent.print(*args)
 
   def __del__(self):
     self.stop()

@@ -145,8 +145,8 @@ class AcquisitionGroup:
     self.start(filepaths, isDisplayed)
     self.run()
 
-  def print(self, message):
-    print(message)
+  def print(self, *args):
+    print(*args)
 
   def __del__(self):
     del self.children
