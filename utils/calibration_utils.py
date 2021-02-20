@@ -1,7 +1,6 @@
 import cv2
 import numpy as np
 import itertools
-from time import time
 import time
 import os
 import matplotlib.pyplot as plt
@@ -9,10 +8,10 @@ import matplotlib as mpl
 import toml
 import pandas as pd
 import ffmpeg
-import subprocess as sp
+import pickle as pk
 import re
 
-CALIB_UPDATE_EACH = 3  # frame interval for calibration update
+CALIB_UPDATE_EACH = 1  # frame interval for calibration update
 GLOBAL_CONFIG_PATH = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig'
 
 
@@ -106,7 +105,7 @@ def reformat_corners(allCorners, allIds):
 
 def quick_calibrate_charuco(allCorners, allIds, board, width, height):
   print("\ncalibrating...")
-  tstart = time()
+  tstart = time.time()
 
   cameraMat = np.eye(3)
   distCoeffs = np.zeros(14)
@@ -125,7 +124,7 @@ def quick_calibrate_charuco(allCorners, allIds, board, width, height):
       dim, cameraMat, distCoeffs,
       flags=calib_flags3)
 
-  tend = time()
+  tend = time.time()
   tdiff = tend - tstart
   print("\ncalibration took {} minutes and {:.1f} seconds".format(
       int(tdiff / 60), tdiff - int(tdiff / 60) * 60))
@@ -280,7 +279,7 @@ class Calib:
     if path is not None:
       if os.path.exists(path):
         try:
-          os.mkdir(os.path.join(path, 'config'))  # is it needed?
+          os.makedirs(os.path.join(path, 'config'))  # is it needed?
         except:
           pass
         self._root_config_path = os.path.join(path, 'config')
@@ -289,71 +288,91 @@ class Calib:
     else:
       self._root_config_path = None
 
-  # load configuration only for extrinsic calibration
-  def load_ex_config(self, camera_serial_number):
-    if not os.path.exists(self.load_path):
-      os.mkdir(self.load_path)
-      raise Warning("config directory doesn't exist. creating one...")
+  def save_temp_config(self,camera_serial_number, width,height):
+    save_path = os.path.join( self.root_config_path, 'config_%s_%s_temp.pk' % (self.type, camera_serial_number))
 
-    items = os.listdir(self.load_path)
-    for item in items:
-      if camera_serial_number in item and self.type in item:
-        path = os.path.join(self.load_path, 'config_%s_%d.toml' %
-                            (self.type, camera_serial_number))
-        with open(path, 'r') as f:
-          # there only should be only one calib file for each camera
-          self.config = toml.load(f)
-          try:
-            self.config['ids'] = reformat(self.config['ids'])
-            self.config['corners'] = reformat(self.config['corners'])
-            markers = pd.DataFrame({'truecorners': list(self.config['corners'])},
-                                   index=list(self.config['ids']))
-            self.config['markers'] = markers
-          except ValueError:
-            print("Missing ids/corners/markers in the configuration file. Please check.")
+    if os.path.exists(save_path):
+      return "please process and delete the previous temp calibration file."
+    else:
+      stuff={'corners':self.allCorners,
+            'ids':self.allIds,
+            'camera_serial_number': camera_serial_number,
+            'width':width,
+            'height':height,
+            'type':self.type,
+            'board':self.board,
+            'date':time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())}
+      with open(save_path,'wb') as f:
+        pk.dump(stuff,f)
+      return "temp calibration file saved!"
+
+  def save_processed_config(self,temp_path):
+
+    if os.path.exists(temp_path):
+      stuff = pk.load(temp_path)
+      save_path = os.path.join(self.root_config_path,
+                               'config_%s_%s.toml' % (self.type, stuff['camera_serial_number']))
+
+      if self.type=="intrinsic":
+        param=quick_calibrate(stuff['corners'],
+                              stuff['ids'],
+                              self.board,
+                              stuff['width'],
+                              stuff['height'])
+        param['camera_serial_number']=stuff['camera_serial_number']
+        param['date'] = stuff['date']
+        if len(param) > 2:
+          with open(save_path, 'w') as f:
+            toml.dump(param, f)
+
+      elif self.type == 'extrinsic':
+        param = {'corners': np.array(stuff['corners']),
+                 'ids': np.array(stuff['ids']),
+                 'camera_serial_number': stuff['camera_serial_number'],
+                 'date': stuff['date']}
+        with open(save_path, 'w') as f:
+          toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
+
+      elif self.type == '3d_extrinsic':
+        pass
 
   def save_config(self, camera_serial_number, width, height):
     save_path = os.path.join(
         self.root_config_path, 'config_%s_%s.toml' % (self.type, camera_serial_number))
     save_copy_path = self.load_path  # overwrite
+    if self.type == "intrinsic":
+      # time consuming
+      param = quick_calibrate(self.allCorners,
+                              self.allIds,
+                              self.board,
+                              width,
+                              height)
+      param['camera_serial_number'] = camera_serial_number
+      param['date'] = time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())
+      if len(param) > 2:
+        with open(save_path, 'w') as f:
+          toml.dump(param, f)
+        # save a copy to the configuration folder. Overwrite the previous one
+        # with open(save_copy_path,'w') as f:
+        #  toml.dump(param, f)
 
-    if 0:  # os.path.exists(save_path):
-      # return 'Configuration file already exists.'
-      pass
-    else:
-      if self.type == "intrinsic":
-        # time consuming
-        param = quick_calibrate(self.allCorners,
-                                self.allIds,
-                                self.board,
-                                width,
-                                height)
-        param['camera_serial_number'] = camera_serial_number
-        param['date'] = time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())
-        if len(param) > 2:
-          with open(save_path, 'w') as f:
-            toml.dump(param, f)
-          # save a copy to the configuration folder. Overwrite the previous one
-          # with open(save_copy_path,'w') as f:
-          #  toml.dump(param, f)
-
-          return "intrinsic calibration configuration saved!"
-        else:
-          return "intrinsic calibration configuration NOT saved due to lack of markers."
+        return "intrinsic calibration configuration saved!"
       else:
-        if self.allIds is not None and len(self.allIds) == self.max_size+1:
-          param = {'corners': np.array(self.allCorners),
-                   'ids': np.array(self.allIds), 'CI': 5,
-                   'camera_serial_number': camera_serial_number,
-                   'date': time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())}
-          with open(save_path, 'w') as f:
-            toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
-          with open(save_copy_path, 'w') as f:
-            toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
+        return "intrinsic calibration configuration NOT saved due to lack of markers."
+    else:
+      if self.allIds is not None and len(self.allIds) == self.max_size+1:
+        param = {'corners': np.array(self.allCorners),
+                 'ids': np.array(self.allIds), 'CI': 5,
+                 'camera_serial_number': camera_serial_number,
+                 'date': time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())}
+        with open(save_path, 'w') as f:
+          toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
+        with open(save_copy_path, 'w') as f:
+          toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
 
-          return 'extrinsic calibration configuration saved!'
-        else:
-          return "failed to record all Ids! Can't save configuration. Please calibrate again."
+        return 'extrinsic calibration configuration saved!'
+      else:
+        return "failed to record all Ids! Can't save configuration. Please calibrate again."
 
   def in_calibrate(self, frame, data_count):
     # write something on the frame
@@ -368,7 +387,8 @@ class Calib:
       detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
           cv2.aruco.refineDetectedMarkers(frame, self.board, corners, ids,
                                           rejectedImgPoints, parameters=self.params)
-      # interpolate corners and draw corners
+
+      # interpolate corners
       if len(detectedCorners) > 0:
         rest, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
             detectedCorners, detectedIds, frame, self.board)
@@ -376,9 +396,9 @@ class Calib:
                 detectedCorners) <= self.max_size:
           self.allCorners.append(detectedCorners)
           self.allIds.append(detectedIds)
-        # cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
 
-      return {'corners': detectedCorners, 'ids': detectedIds}
+
+      return {'corners': corners, 'ids': ids}
     else:
       return {'corners': [], 'ids': []}
 
@@ -387,21 +407,14 @@ class Calib:
     if data_count % CALIB_UPDATE_EACH == 0:
       corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
           frame, self.board.dictionary, parameters=self.params)
-      detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
-          cv2.aruco.refineDetectedMarkers(frame, self.board, corners, ids,
-                                          rejectedImgPoints, parameters=self.params)
-      # interpolate corners and draw corners
-      if len(detectedCorners) > 0:
-        rest, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
-            detectedCorners, detectedIds, frame, self.board)
-        # if detectedCorners is not None and 2 <= len(
-        #        detectedCorners) <= self.max_size:
-        if detectedCorners is not None and len(detectedCorners) == self.max_size+1:
-          self.allCorners = detectedCorners
-          self.allIds = detectedIds
-          allDetected = True
 
-      return {'corners': detectedCorners, 'ids': detectedIds, 'allDetected': allDetected}
+      if corners is not None and len(corners) == self.max_size+1:
+        # update the latest markers
+        self.allCorners = corners
+        self.allIds = ids
+        allDetected = True
+
+      return {'corners': corners, 'ids': ids, 'allDetected': allDetected}
     else:
       return {'corners': [], 'ids': [], 'allDetected': allDetected}
 
@@ -482,7 +495,6 @@ def ex_calibrate(self, frame, data_count):
   return {'corners': corners, 'ids': ids, 'allAligns': allAligns}
 
 # for all cameras
-
 
 def undistort_videos(rootpath):
   raw_items = os.listdir(rootpath)

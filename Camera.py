@@ -147,44 +147,16 @@ class Camera(AcquisitionObject):
     width = PySpin.CIntegerPtr(nodemap.GetNode('Width')).GetValue()
     return device_serial_number, height, width
 
-  # def intrinsic_calibration_switch(self):
-  #   # TODO: with self._displaying_lock:
-  #   if self._displaying:
-  #     if not self._in_calibrating:
-  #       print('turning ON intrinsic calibration mode')
-  #       self._in_calibrating = True
-  #       process['calibrator'].reset()
-  #     else:
-  #       print('turning OFF intrinsic calibration mode')
-  #       self._in_calibrating = False
-  #       process['calibrator'].save_config(self.device_serial_number,
-  #                                 self.width,
-  #                                 self.height)
-  #   else:
-  #     print("not displaying. Can't perform intrinsic calibration")
-
-  # def extrinsic_calibration_switch(self):
-  #   if self._displaying:
-  #     if not self._ex_calibrating:
-  #       print('turning ON extrinsic calibration mode')
-  #       self._ex_calibrating = True
-  #       process['calibrator'].reset()
-  #       process['calibrator'].load_config(self.device_serial_number)
-  #     else:
-  #       print('turning OFF extrinsic calibration mode')
-  #       self._ex_calibrating = False
-  #       process['calibrator'].save_config(self.device_serial_number,
-  #                                 self.width,
-  #                                 self.height)
-  #     # return self.display()
-
   def predisplay(self, frame):
     # TODO: still get frame as input? but should return some kind of dictionary? or array?
     # TODO: where does this get called from?
-
     # TODO: make sure text is not overlapping
     process = self.processing
-
+    #######
+    # data_count = self.data_count
+    # cv2.putText(frame,str(data_count),(50, 50),cv2.FONT_HERSHEY_PLAIN,3.0,255,2)
+    # print(f'sent frame {data_count}')
+    #######
     if process is not None:
       results = self.results
       if results is not None:
@@ -194,8 +166,8 @@ class Camera(AcquisitionObject):
           cv2.putText(frame, f"Performing {process['mode']} calibration", (50, 50),
                       cv2.FONT_HERSHEY_PLAIN, 4.0, (255, 0, 125), 2)
 
-          corners=results['corners']
-          if len(corners)!=0:
+
+          if len(results['corners'])!=0:
             cv2.aruco.drawDetectedMarkers(
                 frame, results['corners'], results['ids'], borderColor=225)
 

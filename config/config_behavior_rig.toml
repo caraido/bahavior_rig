@@ -18,6 +18,7 @@ board_C2C = [1.378,4.724]
 
 unit = 'inch'
 
+# will remove
 recorded_center = [562,437] # manually added
 window_A= [[454,801],[667,807]]# manually added
 window_B= [[934,352], [832,169]]# manually added
