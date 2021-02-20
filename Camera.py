@@ -17,7 +17,7 @@ DLC_UPDATE_EACH = 3  # frame interval for DLC update
 
 class Camera(AcquisitionObject):
 
-  def __init__(self, camlist, index, frame_rate, address):
+  def __init__(self, parent, camlist, index, frame_rate, address):
 
     self._spincam = camlist.GetByIndex(index)
     self._spincam.Init()
@@ -32,7 +32,7 @@ class Camera(AcquisitionObject):
     self.device_serial_number, self.height, self.width = self.get_camera_properties()
 
     AcquisitionObject.__init__(
-        self, frame_rate, (self.width, self.height), address)
+        self, parent, frame_rate, (self.width, self.height), address)
 
     # self._in_calibrating = False
     # self._ex_calibrating = False
@@ -108,7 +108,7 @@ class Camera(AcquisitionObject):
       try:
         im = self._spincam.GetNextImage(FRAME_TIMEOUT)
       except PySpin.SpinnakerException as e:
-        print(f'Error in spinnaker: {e}. Assumed innocuous.')
+        self.print(f'Error in spinnaker: {e}. Assumed innocuous.')
         continue
 
       if im.IsIncomplete():
@@ -121,7 +121,7 @@ class Camera(AcquisitionObject):
 
   def open_file(self, filepath):
     # path = os.path.join(filepath, f'{self.device_serial_number}.mp4')
-    print(f'saving camera data to {filepath}')
+    self.print(f'saving camera data to {filepath}')
     return ffmpeg \
         .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{self.width}x{self.height}', framerate=self.run_rate) \
         .output(filepath, vcodec='libx265') \
@@ -166,8 +166,7 @@ class Camera(AcquisitionObject):
           cv2.putText(frame, f"Performing {process['mode']} calibration", (50, 50),
                       cv2.FONT_HERSHEY_PLAIN, 4.0, (255, 0, 125), 2)
 
-
-          if len(results['corners'])!=0:
+          if len(results['corners']) != 0:
             cv2.aruco.drawDetectedMarkers(
                 frame, results['corners'], results['ids'], borderColor=225)
 

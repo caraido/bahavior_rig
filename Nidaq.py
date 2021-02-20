@@ -21,13 +21,13 @@ class Nidaq(AcquisitionObject):
   # def __init__(self, frame_rate, audio_settings):
     # Nidaq(status['frame_rate'].current, status['sample frequency'].current,
     #  status['read rate'].current, status['spectrogram'].current)
-  def __init__(self, frame_rate, sample_rate, spectrogram_settings, address):
+  def __init__(self, parent, frame_rate, sample_rate, spectrogram_settings, address):
     self.sample_rate = int(sample_rate)
 
     self.parse_settings(spectrogram_settings)
 
     AcquisitionObject.__init__(
-        self, self.run_rate, (int(self.sample_rate // self.run_rate), 1), address)
+        self, parent, self.run_rate, (int(self.sample_rate // self.run_rate), 1), address)
 
     # TODO: verify that we are not violating the task state model: https://zone.ni.com/reference/en-XX/help/370466AH-01/mxcncpts/taskstatemodel/
     # specifically, if we change logging mode, do we need to re-commit the task??
@@ -85,13 +85,13 @@ class Nidaq(AcquisitionObject):
           spectrogram_settings['maximum frequency'].current), num=int(spectrogram_settings['frequency resolution'].current))
 
     self._freq_correct = spectrogram_settings['noise correction'].current
-    print(f'_nx is {self._nx} and _nfft is {self._nfft}')
+    self.print(f'_nx is {self._nx} and _nfft is {self._nfft}')
 
   def open_file(self, filePath):
     self._log_mode[0] = True
     # NOTE: whatever we return here becomes self.file
     # return os.path.join(filePath, 'nidaq.tdms')
-    print(f'Saving nidaq data to {filePath}')
+    self.print(f'Saving nidaq data to {filePath}')
     return filePath
 
   def prepare_display(self):
@@ -113,8 +113,8 @@ class Nidaq(AcquisitionObject):
 
     self.trigger_task.start()
     self.audio_task.start()
-    print('trigger on')
-    print('audio on')
+    self.print('trigger on')
+    self.print('audio on')
 
   def prepare_processing(self, options):
     # in the future if we use deepsqueak for real-time annotation, we would set up for that here

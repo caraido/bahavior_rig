@@ -22,6 +22,6 @@ if __name__ == "__main__":
 
   ag, status = setup()
   initCallbacks(ag, status)
-  app, socket = initServer(status)
+  app, socket = initServer(ag, status)
   print('Serving on port 5001')
   socket.run(app, port=5001)

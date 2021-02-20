@@ -79,7 +79,7 @@ class AcquisitionObject:
 
   # NOT OVERLOADED
 
-  def __init__(self, run_rate, data_size, address):
+  def __init__(self, parent, run_rate, data_size, address):
     # children should call the base init method with the run_rate (in Hz) and the data_size (a tuple for numpy to preallocate)
     self.run_rate = run_rate
     self.data_size = data_size
@@ -109,6 +109,8 @@ class AcquisitionObject:
     self.address = address
     self._sock = initTCP(address)  # TODO: move elsewhere
     self._recipients = []
+
+    self.parent = parent
 
   @property
   def running(self):
@@ -402,6 +404,9 @@ class AcquisitionObject:
       for name in dirs:
         os.rmdir(os.path.join(root, name))
     os.rmdir(path)
+
+  def print(self, message):
+    self.parent.print(message)
 
   def __del__(self):
     self.stop()

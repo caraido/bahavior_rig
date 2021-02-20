@@ -2,14 +2,18 @@ from flask import Flask
 from flask_socketio import SocketIO, emit
 
 
-def initServer(status):
+def initServer(ag, status):
   app = Flask(__name__)
   socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
+
+  def printToGUI(self, message):
+    socketio.emit('message', message, broadcast=True)
 
   @socketio.on('connect')
   def handle_new_connection():
     emit('broadcast', status.update)
     print('new client registered')
+    ag.print = printToGUI
 
   @socketio.on('disconnect')
   def handle_closed_connection():

@@ -21,15 +21,15 @@ class AcquisitionGroup:
     if not isinstance(ports, list):
       ports = [ports + i for i in range(self.nChildren)]
 
-    self.cameras = [Camera(self._camlist, i, status['frame rate'].current, (hostname, ports[i]))
+    self.cameras = [Camera(self, self._camlist, i, status['frame rate'].current, (hostname, ports[i]))
                     for i in range(self.nCameras)]
-    self.mic=Mic(status['sample frequency'].current, status['spectrogram'].current, (
-                           hostname, ports[-2]))
-    self.nidaq = Nidaq(status['frame rate'].current,
+    self.mic = Mic(self, status['sample frequency'].current, status['spectrogram'].current, (
+        hostname, ports[-2]))
+    self.nidaq = Nidaq(self, status['frame rate'].current,
                        status['sample frequency'].current, status['spectrogram'].current, (
                            hostname, ports[-1]))
 
-    self.children = self.cameras + [self.mic]+ [self.nidaq]
+    self.children = self.cameras + [self.mic] + [self.nidaq]
 
     self._processors = [None] * self.nChildren
     self._runners = [None] * self.nChildren
@@ -91,7 +91,7 @@ class AcquisitionGroup:
         self._runners[i] = threading.Thread(target=child.run)
         self._runners[i].start()
       if self._displayers[i] is None or not self._displayers[i].is_alive():
-        if i != 6: # temporaray solution for not displaying nidaq spectrogram
+        if i != 6:  # temporaray solution for not displaying nidaq spectrogram
           self._displayers[i] = threading.Thread(target=child.display)
           self._displayers[i].start()
     self.running = True
@@ -139,10 +139,14 @@ class AcquisitionGroup:
         '''
 
     print('finished AcquisitionGroup.stop()')
+
   def restart(self, filepaths=None, isDisplayed=True):
     self.stop()
     self.start(filepaths, isDisplayed)
     self.run()
+
+  def print(self, message):
+    print(message)
 
   def __del__(self):
     del self.children
