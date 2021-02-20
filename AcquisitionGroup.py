@@ -42,11 +42,12 @@ class AcquisitionGroup:
 
     self.pg = pg.ProcessingGroup()
 
-    print('done setting up ag. is camera 3 running? ', self.cameras[3].running)
+    self.print('done setting up ag. is camera 3 running? ',
+               self.cameras[3].running)
 
   def start(self, filepaths=None, isDisplayed=True):
     if self.started:
-      print('already started. Filepath/display unchanged.')
+      self.print('already started. Filepath/display unchanged.')
       return
 
     self.filepaths = filepaths
@@ -59,19 +60,19 @@ class AcquisitionGroup:
       # wouldn't we then get [[True], [True], [True], ...] ?
       isDisplayed = [isDisplayed] * self.nChildren
 
-    print('detected %d cameras' % self.nCameras)
+    self.print('detected %d cameras' % self.nCameras)
 
     for child, fp, disp in zip(self.cameras, self.filepaths[: -2], isDisplayed[: -2]):
       child.start(filepath=fp, display=disp)
-      print('started camera ' + child.device_serial_number)
+      self.print('started camera ' + child.device_serial_number)
 
     # start mic
     self.mic.start(filepath=self.filepaths[-2], display=isDisplayed[-2])
-    print('started mic')
+    self.print('started mic')
 
     # once the camera BeginAcquisition methods are called, we can start triggering
     self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
-    print('started nidaq')
+    self.print('started nidaq')
 
     self.started = True
 
@@ -99,7 +100,7 @@ class AcquisitionGroup:
     #       # if not self._runners[-1].is_alive():
     #       #   self._runners[-1] = threading.Thread(target=self.nidaq.run)
     #   self._runners[-1].start()
-    print('finished AcquisitionGroup.run')
+    self.print('finished AcquisitionGroup.run')
 
   def process(self, i, options):
     # if it's recording, process() shouldn't be run. except dlc
@@ -118,7 +119,7 @@ class AcquisitionGroup:
     for child in self.children:
       child.stop()
     for child in self.children:
-      print('waiting for next child')
+      self.print('waiting for next child')
       child.wait_for()
     # del self.children
     # self._processors = [None] * self.nChildren
@@ -138,7 +139,7 @@ class AcquisitionGroup:
         Warning("Post analysis failed. Have to do it manually.")
         '''
 
-    print('finished AcquisitionGroup.stop()')
+    self.print('finished AcquisitionGroup.stop()')
 
   def restart(self, filepaths=None, isDisplayed=True):
     self.stop()
