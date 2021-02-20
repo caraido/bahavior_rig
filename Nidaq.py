@@ -22,8 +22,9 @@ class Nidaq(AcquisitionObject):
     # Nidaq(status['frame_rate'].current, status['sample frequency'].current,
     #  status['read rate'].current, status['spectrogram'].current)
   def __init__(self, parent, frame_rate, sample_rate, spectrogram_settings, address):
-    self.sample_rate = int(sample_rate)
 
+    self.sample_rate = int(sample_rate)
+    self.parent = parent
     self.parse_settings(spectrogram_settings)
 
     AcquisitionObject.__init__(

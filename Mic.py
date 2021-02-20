@@ -16,6 +16,7 @@ DUTY_CYCLE = .01  # the fraction of time with the trigger high
 
 class Mic(AcquisitionObject):
   def __init__(self, parent, sample_rate, spectogram_settings, address):
+    self.parent = parent
     self.sample_rate = int(sample_rate)
     self.parse_settings(spectogram_settings)
     self.group_name = AUDIO_INPUT_CHANNEL
