@@ -6,7 +6,7 @@ def initServer(ag, status):
   app = Flask(__name__)
   socketio = SocketIO(app, cors_allowed_origins='*', async_mode='eventlet')
 
-  def printToGUI(self, message):
+  def printToGUI(message):
     socketio.emit('message', message, broadcast=True)
 
   @socketio.on('connect')
