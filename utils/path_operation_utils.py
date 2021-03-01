@@ -147,7 +147,7 @@ def save_notes(content:str, save_paths):
 
 		try:
 			os.remove(temp_file)
-		except OSError(" can't delete"):
+		except:
 			pass
 
 

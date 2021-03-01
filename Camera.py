@@ -13,7 +13,7 @@ import os
 FRAME_TIMEOUT = 100  # time in milliseconds to wait for pyspin to retrieve the frame
 DLC_RESIZE = 0.6  # resize the frame by this factor for DLC
 DLC_UPDATE_EACH = 3  # frame interval for DLC update
-
+TOP_CAM='17391304'
 
 class Camera(AcquisitionObject):
 
@@ -33,7 +33,7 @@ class Camera(AcquisitionObject):
 
     AcquisitionObject.__init__(
         self, parent, frame_rate, (self.width, self.height), address)
-
+    self.is_top = True if self.device_serial_number == TOP_CAM else False
     # self._in_calibrating = False
     # self._ex_calibrating = False
 
@@ -64,6 +64,7 @@ class Camera(AcquisitionObject):
 
       # could move this to init if desired
       process['calibrator'] = Calib(options['mode'])
+      process['calibrator'].load_in_config(self.device_serial_number)
       return process
       # process['calibrator'].root_config_path= self.file # does this return the file path?
 
@@ -77,7 +78,7 @@ class Camera(AcquisitionObject):
       process['frame0'] = False
       status = 'DLC Live turned off'
     else:
-      status = process['calibrator'].save_config(
+      status = process['calibrator'].save_temp_config(
           self.device_serial_number, self.width, self.height)
 
       del process['calibrator']  # could move this to close if desired
@@ -95,11 +96,14 @@ class Camera(AcquisitionObject):
         return process['DLCLive'].get_pose(data), None
     elif process['mode'] == 'intrinsic':
       result = process['calibrator'].in_calibrate(data, data_count)
-      #result = self.intrinsic_calibration(data, process)
       return result, None
-    elif process['mode'] == 'extrinsic':
-      result = process['calibrator'].ex_calibrate2(data, data_count)
-    #  result = self.extrinsic_calibration(data, process)
+
+    elif process['mode'] == 'alignment':
+      result = process['calibrator'].al_calibrate(data, data_count)
+      return result, None
+
+    elif process['mode']=='extrinsic':
+      result = process['calibrator'].ex_calibrate(data, data_count)
       return result, None
 
   def capture(self, data):
@@ -170,21 +174,7 @@ class Camera(AcquisitionObject):
             cv2.aruco.drawDetectedMarkers(
                 frame, results['corners'], results['ids'], borderColor=225)
 
-          if process['mode'] == 'extrinsic':
-            if process['calibrator'].config is None:
-              text = 'No configuration file found. Performing initial extrinsic calibration... '
-            else:
-              text = 'Found configuration file for this camera. Calibrating...'
-            cv2.putText(frame, text, (50, 80),
-                        cv2.FONT_HERSHEY_PLAIN, 2.0, (255, 0, 255), 2)
-
-            '''
-            if results['allAligns']:
-              text='Enough corners aligned! Ready to go'
-            else:
-              text="Missing ids or corners!"
-            '''
-
+          if process['mode'] == 'alignment':
             if results['allDetected']:
               text = 'Enough corners detected! Ready to go'
             else:
@@ -192,12 +182,11 @@ class Camera(AcquisitionObject):
 
             cv2.putText(frame, text, (500, 1000),
                         cv2.FONT_HERSHEY_PLAIN, 2.0, (255, 0, 255), 2)
-
-    if self.file is not None:
-      text = 'recording...'
-      cv2.putText(frame, text, (700, 50),
-                  cv2.FONT_HERSHEY_PLAIN, 4.0, 0, 2)
-
+          if process['mode'] == 'extrinsic':
+            if results['ids'] is None:
+              text = 'Missing board or intrinsic calibration file'
+              cv2.putText(frame, text, (500, 1000),
+                        cv2.FONT_HERSHEY_PLAIN, 2.0, (255, 0, 255), 2)
     return frame
 
 #  def end_run(self):

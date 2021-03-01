@@ -173,6 +173,12 @@ for i in range(4):
               'current': 0,  # unix timestamp
               'allowedValues': {'min': 0, 'max': int(1e10)}
           },
+          'last alignment': {
+              'category': 'Video',
+              'mutable': False,
+              'current': 0,  # unix timestamp
+              'allowedValues': {'min': 0, 'max': int(1e10)}
+          },
           'last extrinsic': {
               'category': 'Video',
               'mutable': False,

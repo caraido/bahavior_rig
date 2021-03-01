@@ -1,7 +1,9 @@
 # from setup import ag, status
 from utils import path_operation_utils as pop
 
-serialNumbers=[19287342,19412282,17391304,17391290]
+
+##serialNumbers=[19287342,19412282,17391304,17391290]
+
 def initCallbacks(ag, status):
 
   def initialization(state):
@@ -66,13 +68,15 @@ def initCallbacks(ag, status):
       # state['camera serial number'].current #gives the current camera SN
       # state['type'].current == 'Intrinsic' #intrinsice or extrinsic?
 
-      status['initialization'].immutable()
+
 
       cam_id=state['camera serial number']
-      cam_num=serialNumbers.index(cam_id)
+      cam_num=ag.camera_order.index(cam_id)
       type = state['calibration type']
       process={'mode':type}
       ag.process(cam_num,options=process)
+
+      status['initialization'].immutable()
 
     else:
       ag.stop()

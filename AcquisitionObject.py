@@ -111,6 +111,7 @@ class AcquisitionObject:
     self._recipients = []
 
     self.parent = parent
+    self.is_top=False
 
   @property
   def running(self):

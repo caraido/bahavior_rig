@@ -6,18 +6,29 @@ import os
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import toml
-import pandas as pd
 import ffmpeg
-import pickle as pk
 import re
+import utils.calibration_3d_utils as ex_3d
+from utils.calibration_3d_utils import get_expected_corners
 
 CALIB_UPDATE_EACH = 1  # frame interval for calibration update
 GLOBAL_CONFIG_PATH = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig'
+TOP_CAM='17301304'
 
+def transform_ids(ids):
+  new_ids = []
+  for item in ids:
+    new_item = np.array(list(map(lambda x: int(x[0]), item)))
+    new_item = new_item[:, np.newaxis]
+    new_ids.append(new_item)
+  return new_ids
 
-def get_expected_corners(board):
-  board_size = board.getChessboardSize()
-  return (board_size[0] - 1) * (board_size[1] - 1)
+def transform_corners(corners):
+  new_corners=[]
+  for item in corners:
+    item = np.array(item, dtype=np.float32)
+    new_corners.append(item)
+  return new_corners
 
 
 def check_ids(ids):
@@ -122,7 +133,7 @@ def quick_calibrate_charuco(allCorners, allIds, board, width, height):
   error, cameraMat, distCoeffs, rvecs, tvecs = cv2.aruco.calibrateCameraCharuco(
       allCorners, allIds, board,
       dim, cameraMat, distCoeffs,
-      flags=calib_flags3)
+      flags=calib_flags2)
 
   tend = time.time()
   tdiff = tend - tstart
@@ -163,13 +174,35 @@ def quick_calibrate(someCorners, someIds, board, width, height):
         allCorners, allIds, board, width, height)
     return calib_params
 
+class Checkerboard:
+  def __init__(self, squaresX, squaresY, squareLength):
+    self.squaresX = squaresX
+    self.squaresY = squaresY
+    self.squareLength = squareLength
+
+    objp = np.zeros((squaresX * squaresY, 3), np.float32)
+    objp[:, :2] = np.mgrid[0:squaresY, 0:squaresX].T.reshape(-1, 2)
+    objp *= squareLength
+    self.chessboardCorners = objp
+    self.objPoints = objp
+
+  def getChessboardSize(self):
+    size = (self.squaresX, self.squaresY)
+    return size
+
+  def getGridSize(self):
+    return self.getChessboardSize()
+
+  def getSquareLength(self):
+    return self.squareLength
+
 
 class CharucoBoard:
-  def __init__(self, x, y, marker_size=0.8, type=None):
+  def __init__(self, x, y, marker_size=0.8,type=None):
     self.x = x
     self.y = y
     self.marker_size = marker_size
-    self.default_dictionary = type  # default
+    self.default_dictionary = type
     self.seed = 0
     self.dictionary = cv2.aruco.getPredefinedDictionary(
         self.default_dictionary)
@@ -200,24 +233,22 @@ class CharucoBoard:
 
   @default_dictionary.setter
   def default_dictionary(self, type):
-    if type is None:
-      self._default_dictionary = cv2.aruco.DICT_4X4_50
-    elif type == 'intrinsic':
+    if type == 'intrinsic' or type == 'extrinsic':
       self._default_dictionary = cv2.aruco.DICT_5X5_50
-    elif type == 'extrinsic':
+    elif type == 'alignment':
       self._default_dictionary = cv2.aruco.DICT_4X4_50
     else:
       raise ValueError('wrong type')
 
   def save_board(self, img_size=1000):
     file_name = 'charuco_board_shape_%dx%d_marker_size_%d_default_%d.png' % (
-        self.x, self.y, self.marker_size, self.default_dictionary)
+    self.x, self.y, self.marker_size, self.default_dictionary)
     img = self.board.draw((img_size, img_size))
     result = cv2.imwrite('./multimedia/board/' + file_name, img)
     if result:
       print('save board successfully! Name: ' + file_name)
     else:
-      raise Exception('save board failed! Name: '+file_name)
+      raise Exception('save board failed! Name: ' + file_name)
 
   def print_board(self):
     img = self.board.draw((1000, 1000))
@@ -235,15 +266,15 @@ class Calib:
     self.allCorners = []
     self.allIds = []
     self.config = None
+    self.temp_file=None
 
     self.charuco_board = CharucoBoard(x=self.x, y=self.y, type=self.type)
     self.board = self.charuco_board.board
 
     self.max_size = get_expected_corners(self.board)
-    self.load_path = GLOBAL_CONFIG_PATH
 
   def _get_type(self, calib_type):
-    if calib_type == 'extrinsic':
+    if calib_type == 'alignment':
       self.type = calib_type
       self.x = 6
       self.y = 2
@@ -251,8 +282,12 @@ class Calib:
       self.type = calib_type
       self.x = 4
       self.y = 5
+    elif calib_type == 'extrinsic':
+      self.type = calib_type
+      self.x = 3
+      self.y = 5
     else:
-      raise ValueError("type can only be intrinsic or extrinsic!")
+      raise ValueError("wrong type!")
 
   def reset(self):
     del self.allIds, self.allCorners, self.config
@@ -288,28 +323,38 @@ class Calib:
     else:
       self._root_config_path = None
 
-  def save_temp_config(self,camera_serial_number, width,height):
-    save_path = os.path.join( self.root_config_path, 'config_%s_%s_temp.pk' % (self.type, camera_serial_number))
+  # check before extrinsic calibration
+  def load_in_config(self, camera_serial_number):
+      path = os.path.join(self.root_config_path, 'config_%s_%s.toml' % ('intrinsic', camera_serial_number))
+      with open(path, 'r') as f:
+        self.config = toml.load(f)
 
-    if os.path.exists(save_path):
-      return "please process and delete the previous temp calibration file."
-    else:
-      stuff={'corners':self.allCorners,
-            'ids':self.allIds,
-            'camera_serial_number': camera_serial_number,
-            'width':width,
-            'height':height,
-            'type':self.type,
-            'board':self.board,
-            'date':time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())}
-      with open(save_path,'wb') as f:
-        pk.dump(stuff,f)
-      return "temp calibration file saved!"
+  def load_temp_config(self,camera_serial_number):
+    load_path = os.path.join( self.root_config_path, 'config_%s_%s_temp.toml' % (self.type, camera_serial_number))
+    with open(load_path,'r') as f:
+      temp_file= toml.load(f)
+    temp_file['ids']=transform_ids(temp_file['ids'])
+    temp_file['corners']=transform_corners(temp_file['corners'])
+    return temp_file
+
+  def save_temp_config(self,camera_serial_number, width,height):
+    save_path = os.path.join( self.root_config_path, 'config_%s_%s_temp.toml' % (self.type, camera_serial_number))
+    stuff={'corners':self.allCorners,
+          'ids':self.allIds,
+          'camera_serial_number': camera_serial_number,
+          'width':width,
+          'height':height,
+          'type':self.type,
+          #'board':self.board,
+          'date':time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())}
+    with open(save_path,'w') as f:
+      toml.dump(stuff,f,encoder=toml.TomlNumpyEncoder())
+    return "temp calibration file saved!"
 
   def save_processed_config(self,temp_path):
 
     if os.path.exists(temp_path):
-      stuff = pk.load(temp_path)
+      stuff = toml.load(temp_path)
       save_path = os.path.join(self.root_config_path,
                                'config_%s_%s.toml' % (self.type, stuff['camera_serial_number']))
 
@@ -325,7 +370,7 @@ class Calib:
           with open(save_path, 'w') as f:
             toml.dump(param, f)
 
-      elif self.type == 'extrinsic':
+      elif self.type == 'alignment':
         param = {'corners': np.array(stuff['corners']),
                  'ids': np.array(stuff['ids']),
                  'camera_serial_number': stuff['camera_serial_number'],
@@ -333,9 +378,10 @@ class Calib:
         with open(save_path, 'w') as f:
           toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
 
-      elif self.type == '3d_extrinsic':
+      elif self.type == 'extrinsic':
         pass
 
+  '''
   def save_config(self, camera_serial_number, width, height):
     save_path = os.path.join(
         self.root_config_path, 'config_%s_%s.toml' % (self.type, camera_serial_number))
@@ -373,12 +419,9 @@ class Calib:
         return 'extrinsic calibration configuration saved!'
       else:
         return "failed to record all Ids! Can't save configuration. Please calibrate again."
+  '''
 
   def in_calibrate(self, frame, data_count):
-    # write something on the frame
-    # text = 'Intrinsic calibration mode On'
-    # cv2.putText(frame, text, (50, 50),
-    #             cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 125), 2)
 
     # get corners and refine them in openCV for every 3 frames
     if data_count % CALIB_UPDATE_EACH == 0:
@@ -396,13 +439,11 @@ class Calib:
                 detectedCorners) <= self.max_size:
           self.allCorners.append(detectedCorners)
           self.allIds.append(detectedIds)
-
-
       return {'corners': corners, 'ids': ids}
     else:
       return {'corners': [], 'ids': []}
 
-  def ex_calibrate2(self, frame, data_count):
+  def al_calibrate(self, frame, data_count):
     allDetected = False
     if data_count % CALIB_UPDATE_EACH == 0:
       corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
@@ -418,7 +459,22 @@ class Calib:
     else:
       return {'corners': [], 'ids': [], 'allDetected': allDetected}
 
-
+  def ex_calibrate(self,frame, data_count):
+    if self.config is not None:
+      if data_count % CALIB_UPDATE_EACH == 0:
+        # detect corners
+        detectedCorners, detectedIds, corners, ids=ex_3d.detect_aruco_2(frame,
+                                                                        intrinsics=self.config,
+                                                                        params=self.params,
+                                                                        board=self.board)
+        self.allCorners.append(detectedCorners)
+        self.allIds.append(detectedIds)
+        return {'corners': corners, 'ids': ids}
+      else:
+        return {'corners': [], 'ids': []}
+    else:
+      return {'corners': [], 'ids': None}
+'''
 def ex_calibrate(self, frame, data_count):
     # if there isn't configuration on the screen, save corners and ids
   allAligns = False  # TODO fix the logic here
@@ -493,7 +549,7 @@ def ex_calibrate(self, frame, data_count):
         #   cv2.putText(frame, text, (500, 1000),
         #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
   return {'corners': corners, 'ids': ids, 'allAligns': allAligns}
-
+'''
 # for all cameras
 
 def undistort_videos(rootpath):
@@ -501,6 +557,9 @@ def undistort_videos(rootpath):
   config_path = os.path.join(rootpath, 'config')
   items = os.listdir(config_path)
   processed_path = os.path.join(rootpath, 'processed')
+  if not os.path.exists(os.path.join(rootpath,'processed')):
+    os.mkdir(os.path.join(rootpath,'processed'))
+  processed_path = os.path.join(rootpath,'processed')
 
   intrinsics = None
   for item in items:
@@ -543,7 +602,6 @@ def undistort_videos(rootpath):
 
 # only for top camera
 
-
 def undistort_markers(rootpath):
   config_path = os.path.join(rootpath, 'config')
   items = os.listdir(config_path)
@@ -555,7 +613,7 @@ def undistort_markers(rootpath):
   for intrinsic in intrinsics:
     serial_number = re.findall("\d+", intrinsic)[0]
     # find top camera
-    if serial_number == '17391304':
+    if serial_number == TOP_CAM:
       with open(os.path.join(config_path, intrinsic), 'r') as f:
         in_config = toml.load(f)
 
