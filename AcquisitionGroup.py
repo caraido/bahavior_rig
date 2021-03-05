@@ -81,7 +81,7 @@ class AcquisitionGroup:
     self.print('started mic')
 
     # once the camera BeginAcquisition methods are called, we can start triggering
-    self.nidaq.start(filepath=self.filepaths[-1], display=isDisplayed[-1])
+    self.nidaq.start(filepath=self.filepaths[-1], display=False)
     self.print('started nidaq')
 
     self.started = True
@@ -102,7 +102,7 @@ class AcquisitionGroup:
         self._runners[i] = threading.Thread(target=child.run)
         self._runners[i].start()
       if self._displayers[i] is None or not self._displayers[i].is_alive():
-        if i != 6:  # temporaray solution for not displaying nidaq spectrogram
+        if i != 5:  # temporaray solution for not displaying nidaq spectrogram
           self._displayers[i] = threading.Thread(target=child.display)
           self._displayers[i].start()
     self.running = True

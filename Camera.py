@@ -34,8 +34,6 @@ class Camera(AcquisitionObject):
     AcquisitionObject.__init__(
         self, parent, frame_rate, (self.width, self.height), address)
     self.is_top = True if self.device_serial_number == TOP_CAM else False
-    # self._in_calibrating = False
-    # self._ex_calibrating = False
 
   # TODO: make sure this step should be in prepare_display or prepare_run
 
@@ -95,7 +93,7 @@ class Camera(AcquisitionObject):
       else:
         return process['DLCLive'].get_pose(data), None
     elif process['mode'] == 'intrinsic':
-      result = process['calibrator'].in_calibrate(data, data_count)
+      result = process['calibrator'].in_calibrate(data, data_count,self.device_serial_number)
       return result, None
 
     elif process['mode'] == 'alignment':
@@ -170,9 +168,12 @@ class Camera(AcquisitionObject):
           cv2.putText(frame, f"Performing {process['mode']} calibration", (50, 50),
                       cv2.FONT_HERSHEY_PLAIN, 4.0, (255, 0, 125), 2)
 
-          if len(results['corners']) != 0:
-            cv2.aruco.drawDetectedMarkers(
-                frame, results['corners'], results['ids'], borderColor=225)
+          if str(self.device_serial_number) == str(TOP_CAM):
+            cv2.drawChessboardCorners(frame, (process['calibrator'].x,process['calibrator'].y), results['corners'], results['ret'])
+          else:
+            if len(results['corners']) != 0:
+              cv2.aruco.drawDetectedMarkers(
+                  frame, results['corners'], results['ids'], borderColor=225)
 
           if process['mode'] == 'alignment':
             if results['allDetected']:

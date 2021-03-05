@@ -1,13 +1,11 @@
 import numpy as np
 from scipy import signal, interpolate
-import matplotlib as mpl
+
 import nidaqmx
 from nidaqmx.stream_readers import AnalogSingleChannelReader as AnalogReader
 from AcquisitionObject import AcquisitionObject
-import os
-import time
-from io import BytesIO
-import ffmpeg
+import scipy.io.wavfile as wavfile
+from utils.audio_processing import read_audio
 # import RigStatus
 
 AUDIO_INPUT_CHANNEL = 'Dev1/ai1'
@@ -160,6 +158,10 @@ class Nidaq(AcquisitionObject):
   def end_run(self):
     self.audio_task.stop()
     self.trigger_task.stop()
+    if self.filepath:
+      audio, _ = read_audio(self.filepath)
+      wavfile.write(self.filepath[:-4]+'wav', self.sample_rate, audio)
+      self.print('save USB mic')
 
   def end_display(self):
     self._log_mode[1] = True

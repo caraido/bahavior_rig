@@ -36,7 +36,7 @@ def setup():
     status[f'camera {j}'].current['port'].immutable()
 
   status['spectrogram'].current['port'].mutable()
-  status['spectrogram'].current['port'](ag.nidaq.address[1])
+  status['spectrogram'].current['port'](ag.mic.address[1])
   status['spectrogram'].current['port'].immutable()
 
   return ag, status

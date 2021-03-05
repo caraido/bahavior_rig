@@ -25,7 +25,6 @@ class Mic(AcquisitionObject):
     self.format = pyaudio.paFloat32
     self.index = None
     self.stream = None
-    self.filepath = None
 
     AcquisitionObject.__init__(
         self, parent, self.run_rate, int(self.sample_rate // self.run_rate), address)
@@ -104,12 +103,13 @@ class Mic(AcquisitionObject):
           return
 
   def capture_chunk(self, in_data, frame_count, time_info, status):
-    self.data = self.new_data
+    self.data = np.fromstring(in_data, dtype=np.float32)
     if self._has_runner:
       data_chunk = nptdms.ChannelObject(self.group_name,
                                         self.channel_name,
                                         self.data,
                                         properties={})
+
       if self.filepath is not None:
         with nptdms.TdmsWriter(self.filepath, 'a') as writer:
           writer.write_segment([data_chunk])
@@ -123,8 +123,9 @@ class Mic(AcquisitionObject):
     overlapping FFTs. For now just trying non-overlapping FFTs ~ the simplest approach.
     '''
 
+
     _, _, spectrogram = signal.spectrogram(
-        data, self.sample_rate, nperseg=self._window, noverlap=self._overlap)
+        self.data, self.sample_rate, nperseg=self._window, noverlap=self._overlap)
 
     self.print(self._xq.shape, self._yq.shape,
                spectrogram.shape, self._zq.shape)
@@ -145,6 +146,7 @@ class Mic(AcquisitionObject):
 
     # interpSpect = mpl.cm.viridis(interpSpect) * 255  # colormap
     interpSpect = interpSpect * 255  # TODO: decide how to handle colormapping?
+    interpSpect=np.flipud(interpSpect)
     return interpSpect.astype(np.uint8)
 
   def end_run(self):

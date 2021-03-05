@@ -92,6 +92,7 @@ class AcquisitionObject:
 
     self._data_lock = threading.Lock()
     self._data = None
+    self.filepath = None
 
     self._processing_lock = threading.Lock()
     self._processing = False
@@ -105,7 +106,7 @@ class AcquisitionObject:
     # self._has_filepath = False
     self._has_displayer = False
 
-    # self.filepath = None
+
     self.address = address
     self._sock = initTCP(address)  # TODO: move elsewhere
     self._recipients = []
@@ -275,7 +276,7 @@ class AcquisitionObject:
     self._data_size = data_size
 
   def start(self, filepath=None, display=False):
-    # self.filepath = filepath
+    self.filepath = filepath
     self.file = filepath
     self.data = display
     self.running = True

@@ -41,18 +41,18 @@ initialStatus = {  # just an example
         'current': {
             'log scaling': {
                 'category': 'Audio',
-                'current': True,
+                'current': False,
                 'mutable': True,
             },
             'minimum frequency': {
                 'category': 'Audio',
-                'current': int(200),
+                'current': int(1e4),
                 'allowedValues': {'min': int(1e2), 'max': int(3e4)},
                 'mutable': True
             },
             'maximum frequency': {
                 'category': 'Audio',
-                'current': int(4e4),
+                'current': int(5e4),
                 'allowedValues': {'min': int(4e4), 'max': int(1.5e5)},
                 'mutable': True
             },

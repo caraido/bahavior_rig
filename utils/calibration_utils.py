@@ -13,7 +13,8 @@ from utils.calibration_3d_utils import get_expected_corners
 
 CALIB_UPDATE_EACH = 1  # frame interval for calibration update
 GLOBAL_CONFIG_PATH = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig'
-TOP_CAM='17301304'
+TOP_CAM='17391304'
+
 
 def transform_ids(ids):
   new_ids = []
@@ -23,11 +24,19 @@ def transform_ids(ids):
     new_ids.append(new_item)
   return new_ids
 
+
 def transform_corners(corners):
   new_corners=[]
   for item in corners:
     item = np.array(item, dtype=np.float32)
     new_corners.append(item)
+  return new_corners
+
+def transform_cornersWorld(corners):
+  new_corners=[]
+  for item in corners:
+    item = np.array(item, dtype=np.float32)
+    new_corners.append(item[:,0,:,:])
   return new_corners
 
 
@@ -89,7 +98,7 @@ def reformat(ids):
   return np.array(new_ids)
 
 
-def trim_corners(allCorners, allIds, maxBoards=85):
+def trim_corners(allCorners, allIds,allCornersWorld, maxBoards=85):
   '''
   only take "maxBoard" number of optimal allCorners
   '''
@@ -100,18 +109,21 @@ def trim_corners(allCorners, allIds, maxBoards=85):
   subs = np.argsort(sort)[:maxBoards]
   allCorners = [allCorners[ix] for ix in subs if sufficient_corners[ix]]
   allIds = [allIds[ix] for ix in subs if sufficient_corners[ix]]
-  return allCorners, allIds
+  allCornersWorld = [allCornersWorld[ix] for ix in subs if sufficient_corners[ix]]
+  return allCorners, allIds,allCornersWorld
 
 
-def reformat_corners(allCorners, allIds):
+def reformat_corners(allCorners, allIds,allCornersWorld):
   markerCounter = np.array([len(cs) for cs in allCorners])
   allCornersConcat = itertools.chain.from_iterable(allCorners)
   allIdsConcat = itertools.chain.from_iterable(allIds)
+  allCornersWorldConcat = itertools.chain.from_iterable(allCornersWorld)
 
   allCornersConcat = np.array(list(allCornersConcat))
   allIdsConcat = np.array(list(allIdsConcat))
+  allCornersWorldConcat = np.array(list(allCornersWorldConcat))
 
-  return allCornersConcat, allIdsConcat, markerCounter
+  return allCornersConcat, allIdsConcat, allCornersWorldConcat,markerCounter
 
 
 def quick_calibrate_charuco(allCorners, allIds, board, width, height):
@@ -129,11 +141,12 @@ def quick_calibrate_charuco(allCorners, allIds, board, width, height):
   # https://docs.opencv.org/3.4/d9/d0c/group__calib3d.html
   calib_flags3 = cv2.CALIB_RATIONAL_MODEL + \
       cv2.CALIB_THIN_PRISM_MODEL + cv2.CALIB_TILTED_MODEL
+  calib_flags4 = cv2.CALIB_RATIONAL_MODEL
 
   error, cameraMat, distCoeffs, rvecs, tvecs = cv2.aruco.calibrateCameraCharuco(
       allCorners, allIds, board,
       dim, cameraMat, distCoeffs,
-      flags=calib_flags2)
+      flags=calib_flags4)
 
   tend = time.time()
   tdiff = tend - tstart
@@ -150,16 +163,55 @@ def quick_calibrate_charuco(allCorners, allIds, board, width, height):
   return out
 
 
-def quick_calibrate(someCorners, someIds, board, width, height):
+def quick_calibrate_fisheye(someCorners,width,height):
+
+    print("\ncalibrating...")
+    tstart = time.time()
+
+    # transform into image points list
+    imgp = transform_corners(someCorners)
+
+    # get object points
+    obj = np.zeros((1, 4 * 5, 3), np.float32)
+    obj[0, :, :2] = np.mgrid[0:4, 0:5].T.reshape(-1, 2)
+    N_corners = len(imgp)
+    objp = [obj] * N_corners
+
+    # define calibration flag
+    calib_flags = cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC + \
+                   cv2.fisheye.CALIB_CHECK_COND + cv2.fisheye.CALIB_FIX_SKEW
+    dim = (width, height)
+
+    # calibrate (fast)
+    error, cameraMat, distCoeffs, rvecs, tvecs =cv2.fisheye.calibrate(objp,
+                                                                      imgp,
+                                                                      dim,
+                                                                      None,None,flags=calib_flags)
+    # count time
+    tend = time.time()
+    tdiff = tend - tstart
+    print("\ncalibration took {} minutes and {:.1f} seconds".format(
+      int(tdiff / 60), tdiff - int(tdiff / 60) * 60))
+
+    out = dict()
+    out['error'] = error
+    out['camera_mat'] = cameraMat.tolist()
+    out['dist_coeff'] = distCoeffs.tolist()
+    out['width'] = width
+    out['height'] = height
+    return out
+
+
+def quick_calibrate(someCorners, someIds, cornersWorld,board, width, height):
   allCorners = []
   allIds = []
 
   allCorners.extend(someCorners)
   allIds.extend(someIds)
 
-  allCorners, allIds = trim_corners(allCorners, allIds, maxBoards=100)
-  allCornersConcat, allIdsConcat, markerCounter = reformat_corners(
-      allCorners, allIds)
+  allCorners, allIds,allCornersWorld = trim_corners(allCorners, allIds, cornersWorld, maxBoards=100)
+  allCornersConcat, allIdsConcat, allcornersWorldConcat,markerCounter = reformat_corners(
+      allCorners, allIds,allCornersWorld)
 
   expected_markers = get_expected_corners(board)+1
 
@@ -173,6 +225,7 @@ def quick_calibrate(someCorners, someIds, board, width, height):
     calib_params = quick_calibrate_charuco(
         allCorners, allIds, board, width, height)
     return calib_params
+
 
 class Checkerboard:
   def __init__(self, squaresX, squaresY, squareLength):
@@ -203,9 +256,11 @@ class CharucoBoard:
     self.y = y
     self.marker_size = marker_size
     self.default_dictionary = type
-    self.seed = 0
+    self.cornersWorldWhole=[]
     self.dictionary = cv2.aruco.getPredefinedDictionary(
         self.default_dictionary)
+
+    self._buildBoardCorrdination_3D()
 
   @property
   def board(self):
@@ -240,6 +295,14 @@ class CharucoBoard:
     else:
       raise ValueError('wrong type')
 
+  def _buildBoardCorrdination_3D(self):
+    squareSize = 1 / 100
+    for y in range(self.y - 1):
+      for x in range(self.x - 1):
+        self.cornersWorldWhole.append([[x * squareSize, y * squareSize, 0]])
+
+    self.cornersWorldWhole = np.array(self.cornersWorldWhole, 'float32')
+
   def save_board(self, img_size=1000):
     file_name = 'charuco_board_shape_%dx%d_marker_size_%d_default_%d.png' % (
     self.x, self.y, self.marker_size, self.default_dictionary)
@@ -265,6 +328,7 @@ class Calib:
 
     self.allCorners = []
     self.allIds = []
+
     self.config = None
     self.temp_file=None
 
@@ -345,12 +409,13 @@ class Calib:
           'width':width,
           'height':height,
           'type':self.type,
-          #'board':self.board,
           'date':time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())}
     with open(save_path,'w') as f:
       toml.dump(stuff,f,encoder=toml.TomlNumpyEncoder())
     return "temp calibration file saved!"
 
+
+  # used in post processing
   def save_processed_config(self,temp_path):
 
     if os.path.exists(temp_path):
@@ -359,11 +424,20 @@ class Calib:
                                'config_%s_%s.toml' % (self.type, stuff['camera_serial_number']))
 
       if self.type=="intrinsic":
-        param=quick_calibrate(stuff['corners'],
-                              stuff['ids'],
-                              self.board,
-                              stuff['width'],
-                              stuff['height'])
+        if str(stuff['camera_serial_number'])==TOP_CAM:
+          # regular intrinsic calibration for top camera
+          param=quick_calibrate(stuff['corners'],
+                                stuff['ids'],
+                                self.board,
+                                stuff['width'],
+                                stuff['height'])
+        else:
+          # fisheye calibration for side cameras
+          param = quick_calibrate_fisheye(stuff['corners'],
+                                          stuff['width'],
+                                          stuff['height'])
+
+        # add camera serial number
         param['camera_serial_number']=stuff['camera_serial_number']
         param['date'] = stuff['date']
         if len(param) > 2:
@@ -379,69 +453,38 @@ class Calib:
           toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
 
       elif self.type == 'extrinsic':
+        # TODO
         pass
 
-  '''
-  def save_config(self, camera_serial_number, width, height):
-    save_path = os.path.join(
-        self.root_config_path, 'config_%s_%s.toml' % (self.type, camera_serial_number))
-    save_copy_path = self.load_path  # overwrite
-    if self.type == "intrinsic":
-      # time consuming
-      param = quick_calibrate(self.allCorners,
-                              self.allIds,
-                              self.board,
-                              width,
-                              height)
-      param['camera_serial_number'] = camera_serial_number
-      param['date'] = time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())
-      if len(param) > 2:
-        with open(save_path, 'w') as f:
-          toml.dump(param, f)
-        # save a copy to the configuration folder. Overwrite the previous one
-        # with open(save_copy_path,'w') as f:
-        #  toml.dump(param, f)
-
-        return "intrinsic calibration configuration saved!"
-      else:
-        return "intrinsic calibration configuration NOT saved due to lack of markers."
-    else:
-      if self.allIds is not None and len(self.allIds) == self.max_size+1:
-        param = {'corners': np.array(self.allCorners),
-                 'ids': np.array(self.allIds), 'CI': 5,
-                 'camera_serial_number': camera_serial_number,
-                 'date': time.strftime("%Y-%m-%d-_%H:%M:%S", time.localtime())}
-        with open(save_path, 'w') as f:
-          toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
-        with open(save_copy_path, 'w') as f:
-          toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
-
-        return 'extrinsic calibration configuration saved!'
-      else:
-        return "failed to record all Ids! Can't save configuration. Please calibrate again."
-  '''
-
-  def in_calibrate(self, frame, data_count):
-
-    # get corners and refine them in openCV for every 3 frames
+  def in_calibrate(self, frame, data_count,serial_number):
+    # get corners and refine them in openCV for every CALIB_UPDATE_EACH frames
     if data_count % CALIB_UPDATE_EACH == 0:
-      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-          frame, self.board.dictionary, parameters=self.params)
-      detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
-          cv2.aruco.refineDetectedMarkers(frame, self.board, corners, ids,
-                                          rejectedImgPoints, parameters=self.params)
+      if str(serial_number) == TOP_CAM:
+        ret, corners=cv2.findChessboardCorners(frame, (self.x,self.y),None)
+        if ret:
+          SUB_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TermCriteria_MAX_ITER, 30, 0.1)
+          corners = cv2.cornerSubPix(frame, corners, (3, 3), (-1, -1), SUB_CRITERIA)
+          self.allCorners.append(corners)
+        return {'corners':corners,'ret':ret}
+      else:
+        corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
+            frame, self.board.dictionary, parameters=self.params)
+        detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
+            cv2.aruco.refineDetectedMarkers(frame, self.board, corners, ids,
+                                            rejectedImgPoints, parameters=self.params)
 
-      # interpolate corners
-      if len(detectedCorners) > 0:
-        rest, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
-            detectedCorners, detectedIds, frame, self.board)
-        if detectedCorners is not None and 2 <= len(
-                detectedCorners) <= self.max_size:
-          self.allCorners.append(detectedCorners)
-          self.allIds.append(detectedIds)
-      return {'corners': corners, 'ids': ids}
-    else:
-      return {'corners': [], 'ids': []}
+        # interpolate corners
+        if len(detectedCorners) > 0:
+          recoveredIdxsst, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
+              detectedCorners, detectedIds, frame, self.board)
+          if detectedCorners is not None and 2 <= len(
+                  detectedCorners) <= self.max_size:
+            self.allCorners.append(detectedCorners)
+            self.allIds.append(detectedIds)
+
+          return {'corners': corners, 'ids': ids}
+        else:
+          return {'corners': [], 'ids': []}
 
   def al_calibrate(self, frame, data_count):
     allDetected = False
@@ -550,6 +593,7 @@ def ex_calibrate(self, frame, data_count):
         #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
   return {'corners': corners, 'ids': ids, 'allAligns': allAligns}
 '''
+
 # for all cameras
 
 def undistort_videos(rootpath):
