@@ -403,23 +403,35 @@ class Calib:
 
   def save_temp_config(self,camera_serial_number, width,height):
     save_path = os.path.join( self.root_config_path, 'config_%s_%s_temp.toml' % (self.type, camera_serial_number))
-    stuff={'corners':self.allCorners,
-          'ids':self.allIds,
-          'camera_serial_number': camera_serial_number,
-          'width':width,
-          'height':height,
-          'type':self.type,
-          'date':time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())}
-    with open(save_path,'w') as f:
-      toml.dump(stuff,f,encoder=toml.TomlNumpyEncoder())
-    return "temp calibration file saved!"
-
+    if self.type=='intrinsic' or self.type=='alignment':
+      if len(self.allCorners)>0:
+        stuff={'corners':self.allCorners,
+              'ids':self.allIds,
+              'camera_serial_number': camera_serial_number,
+              'width':width,
+              'height':height,
+              'type':self.type,
+              'date':time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())}
+        with open(save_path,'w') as f:
+          toml.dump(stuff,f,encoder=toml.TomlNumpyEncoder())
+        return "temp calibration file saved!"
+      else:
+        return "Didn't detect any markers or corners"
+    else:
+      stuff = {'camera_serial_number': camera_serial_number,
+               'width': width,
+               'height': height,
+               'type': self.type,
+               'date': time.strftime("%Y-%m-%d-%H:%M:%S", time.localtime())}
+      with open(save_path, 'w') as f:
+        toml.dump(stuff, f, encoder=toml.TomlNumpyEncoder())
+      return "temp calibration file saved!"
 
   # used in post processing
   def save_processed_config(self,temp_path):
-
     if os.path.exists(temp_path):
-      stuff = toml.load(temp_path)
+      with open(temp_path,'r') as f:
+        stuff = toml.load(f)
       save_path = os.path.join(self.root_config_path,
                                'config_%s_%s.toml' % (self.type, stuff['camera_serial_number']))
 
@@ -440,12 +452,21 @@ class Calib:
         # add camera serial number
         param['camera_serial_number']=stuff['camera_serial_number']
         param['date'] = stuff['date']
-        if len(param) > 2:
-          with open(save_path, 'w') as f:
-            toml.dump(param, f)
+        with open(save_path, 'w') as f:
+          toml.dump(param, f)
 
       elif self.type == 'alignment':
-        param = {'corners': np.array(stuff['corners']),
+        # get intrinsic file
+        top_intrinsic = 'config_intrinsic_%s.toml'%TOP_CAM
+        intrinsic_path= os.path.join(self.root_config_path,top_intrinsic)
+        with open(intrinsic_path,'r') as f:
+          intrinsic = toml.load(f)
+
+        camera_mat = np.array(intrinsic['camera_mat'])
+        dist = np.array(intrinsic['dist_coeff'])
+
+        markers = undistort_markers(stuff['corners'], camera_mat,dist)
+        param = {'undistorted_corners': markers,
                  'ids': np.array(stuff['ids']),
                  'camera_serial_number': stuff['camera_serial_number'],
                  'date': stuff['date']}
@@ -453,13 +474,12 @@ class Calib:
           toml.dump(param, f, encoder=toml.TomlNumpyEncoder())
 
       elif self.type == 'extrinsic':
-        # TODO
         pass
 
   def in_calibrate(self, frame, data_count,serial_number):
     # get corners and refine them in openCV for every CALIB_UPDATE_EACH frames
     if data_count % CALIB_UPDATE_EACH == 0:
-      if str(serial_number) == TOP_CAM:
+      if str(serial_number) != TOP_CAM and self.type=='intrinsic':
         ret, corners=cv2.findChessboardCorners(frame, (self.x,self.y),None)
         if ret:
           SUB_CRITERIA = (cv2.TERM_CRITERIA_EPS + cv2.TermCriteria_MAX_ITER, 30, 0.1)
@@ -517,82 +537,6 @@ class Calib:
         return {'corners': [], 'ids': []}
     else:
       return {'corners': [], 'ids': None}
-'''
-def ex_calibrate(self, frame, data_count):
-    # if there isn't configuration on the screen, save corners and ids
-  allAligns = False  # TODO fix the logic here
-  if self.config is None:
-      # text = 'No configuration file found. Performing initial extrinsic calibration... '
-      # cv2.putText(frame, text, (50, 50),
-      #             cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-
-      # calibrate every 3 frames
-    if data_count % 3 == 0:  # TODO: move to constant at top of file
-        # get parameters
-      params = self.params
-
-      # detect corners
-      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-          frame, self.board.dictionary, parameters=params)
-      if ids is not None:
-          # draw corners on the screen
-          # cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
-
-        if len(ids) >= len(self.allIds):
-          self.allCorners = corners
-          self.allIds = ids
-  else:
-    # text = 'Found configuration file for this camera. Calibrating...'
-    # cv2.putText(frame, text, (50, 50),
-    #             cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-
-    if True:  # process['calibrator'].decimator % 3 == 0:
-      truecorners = self.config['corners']  # float numbers
-      trueids = self.config['ids']  # int numbers
-      CI = self.config['CI']  # int pixels
-      markers = self.config['markers']
-
-      # key step: detect markers
-      corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
-          frame, self.board.dictionary, parameters=self.params)
-
-      # make sure there are ids and markers and the number of ids is no less than 3
-      if check_ids(ids) and check_corners(corners):
-
-        # check if aligned:
-        aligns, colors = get_align_color(
-            ids, corners, trueids, truecorners, CI)
-
-        markers['aligns'] = pd.Series(
-            aligns, index=list(map(str, reformat(ids))))
-        markers['colors'] = pd.Series(
-            colors, index=list(map(str, reformat(ids))))
-
-        # any way to make it more concise?
-        for tid, truecorner in zip(trueids, truecorners):
-          real_color = int(markers['colors'][tid]) if pd.notna(
-              markers['colors'][tid]) else 200
-          point1 = tuple(np.array(truecorner[0], np.int))
-          point2 = tuple(np.array(truecorner[1], np.int))
-          point3 = tuple(np.array(truecorner[2], np.int))
-          point4 = tuple(np.array(truecorner[3], np.int))
-          cv2.line(frame, point1, point2, color=real_color, thickness=CI * 2)
-          cv2.line(frame, point2, point3, color=real_color, thickness=CI * 2)
-          cv2.line(frame, point3, point4, color=real_color, thickness=CI * 2)
-          cv2.line(frame, point4, point1, color=real_color, thickness=CI * 2)
-        # draw the detected markers on top of the true markers.
-        # cv2.aruco.drawDetectedMarkers(frame, corners, ids, borderColor=225)
-
-        allAligns = all(aligns)
-        #   text = 'Enough corners aligned! Ready to go'
-        #   cv2.putText(frame, text, (500, 1000),
-        #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-        # else:
-        #   text = "Missing ids or corners!"
-        #   cv2.putText(frame, text, (500, 1000),
-        #               cv2.FONT_HERSHEY_PLAIN, 2.0, (0, 0, 255), 2)
-  return {'corners': corners, 'ids': ids, 'allAligns': allAligns}
-'''
 
 # for all cameras
 
@@ -602,8 +546,7 @@ def undistort_videos(rootpath):
   items = os.listdir(config_path)
   processed_path = os.path.join(rootpath, 'processed')
   if not os.path.exists(os.path.join(rootpath,'processed')):
-    os.mkdir(os.path.join(rootpath,'processed'))
-  processed_path = os.path.join(rootpath,'processed')
+    os.mkdir(processed_path)
 
   intrinsics = None
   for item in items:
@@ -622,21 +565,35 @@ def undistort_videos(rootpath):
       movie = [a for a in raw_items if serial_number in a and '.MOV' in a]
       movie_path = os.path.join(rootpath, movie[0])
 
-      # TODO: frame rate needs to coordinate with raw video
-      video_writer = ffmpeg \
-          .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{width}x{height}', framerate=30) \
-          .output(os.path.join(processed_path, 'undistorted_'+movie[0]), vcodec='libx265') \
-          .overwrite_output() \
-          .run_async(pipe_stdin=True)
-      # TODO: switch to quiet mode, see Camera.open_file
 
       cap = cv2.VideoCapture(movie_path)
+      run_rate=cap.get(cv2.CAP_PROP_FPS)
+
+      # TODO: frame rate needs to coordinate with raw video
+      video_writer = ffmpeg \
+          .input('pipe:', format='rawvideo', pix_fmt='gray', s=f'{width}x{height}', framerate=run_rate) \
+          .output(os.path.join(processed_path, 'undistorted_'+movie[0]), vcodec='libx265') \
+          .overwrite_output() \
+          .global_args('-loglevel','error')\
+          .run_async(pipe_stdin=True,quiet=True)
+
+
+      # get fisheye matrix
+      mtx_new = mtx.copy()
+      # crop the frame
+      mtx_new[(0, 1), (0, 1)] = 0.4 * mtx_new[(0, 1), (0, 1)]
+
+
       ret = True
       while ret:
         ret, frame = cap.read()
         if ret:
           gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-          dst = cv2.undistort(gray, mtx, dist, None, newcameramtx)
+          if serial_number == TOP_CAM:
+            dst = cv2.undistort(gray, mtx, dist, None, newcameramtx)
+          else:
+            dst = cv2.fisheye.undistortImage(gray,mtx,dist,Knew=mtx_new)
+
           video_writer.stdin.write(dst.tobytes())
       video_writer.stdin.close()
       video_writer.wait()
@@ -645,8 +602,18 @@ def undistort_videos(rootpath):
   return intrinsics
 
 # only for top camera
+def undistort_markers(corners, camera_mat,dist):
+  corners = np.array(corners)
+  shape = corners.shape
+  new_corners = []
+  for i in range(shape[0]):
+    new_corner = cv2.undistortPoints(corners[i], camera_mat, dist, P=camera_mat)
+    new_corners.append(new_corner)
+  undistort_corners = np.swapaxes(np.array(new_corners), 1, 2)
+  return undistort_corners
 
-def undistort_markers(rootpath):
+
+def undistort_markers_archive(rootpath):
   config_path = os.path.join(rootpath, 'config')
   items = os.listdir(config_path)
   if not os.path.exists(os.path.join(rootpath, 'processed')):
@@ -655,18 +622,17 @@ def undistort_markers(rootpath):
   intrinsics = [a for a in items if 'intrinsic' in a]
 
   for intrinsic in intrinsics:
-    serial_number = re.findall("\d+", intrinsic)[0]
     # find top camera
-    if serial_number == TOP_CAM:
+    if str(TOP_CAM) in intrinsic:
       with open(os.path.join(config_path, intrinsic), 'r') as f:
         in_config = toml.load(f)
 
       mtx = np.array(in_config['camera_mat'])
       dist = np.array(in_config['dist_coeff'])
 
-      with open(os.path.join(config_path, 'config_extrinsic_%s.toml' % serial_number), 'r') as f:
-        ex_config = toml.load(f)
-      corners = np.array(ex_config['corners'])
+      with open(os.path.join(config_path, 'config_alignment_%s.toml' % TOP_CAM), 'r') as f:
+        al_config = toml.load(f)
+      corners = np.array(al_config['corners'])
       shape = corners.shape
       new_corners = []
       for i in range(shape[0]):
@@ -675,5 +641,5 @@ def undistort_markers(rootpath):
       undistort_corners = np.swapaxes(np.array(new_corners), 1, 2).tolist()
       new_item = {'undistorted_corners': undistort_corners}
 
-      with open(os.path.join(config_path, 'config_extrinsic_%s.toml' % serial_number), 'a') as f:
+      with open(os.path.join(config_path, 'config_extrinsic_%s.toml' % TOP_CAM), 'a') as f:
         toml.dump(new_item, f)

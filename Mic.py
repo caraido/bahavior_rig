@@ -127,8 +127,8 @@ class Mic(AcquisitionObject):
     _, _, spectrogram = signal.spectrogram(
         self.data, self.sample_rate, nperseg=self._window, noverlap=self._overlap)
 
-    self.print(self._xq.shape, self._yq.shape,
-               spectrogram.shape, self._zq.shape)
+    #self.print(self._xq.shape, self._yq.shape,
+    #          spectrogram.shape, self._zq.shape)
     interpSpect = interpolate.RectBivariateSpline(
         self._yq, self._xq, spectrogram)(self._zq, self._xq)  # TODO: try linear instead of spline, univariate instead of bivariate
 

@@ -14,6 +14,7 @@ FRAME_TIMEOUT = 100  # time in milliseconds to wait for pyspin to retrieve the f
 DLC_RESIZE = 0.6  # resize the frame by this factor for DLC
 DLC_UPDATE_EACH = 3  # frame interval for DLC update
 TOP_CAM='17391304'
+TEMP_PATH = r'C:\Users\SchwartzLab\PycharmProjects\bahavior_rig\config'
 
 class Camera(AcquisitionObject):
 
@@ -63,6 +64,11 @@ class Camera(AcquisitionObject):
       # could move this to init if desired
       process['calibrator'] = Calib(options['mode'])
       process['calibrator'].load_in_config(self.device_serial_number)
+      # TODO: is there a better to handle recording during calibration?
+      if process['mode']=='extrinsic':
+        path = os.path.join(TEMP_PATH,'config_extrinsic_%s_temp.MOV'%self.device_serial_number)
+        self.file = path
+
       return process
       # process['calibrator'].root_config_path= self.file # does this return the file path?
 
@@ -78,7 +84,7 @@ class Camera(AcquisitionObject):
     else:
       status = process['calibrator'].save_temp_config(
           self.device_serial_number, self.width, self.height)
-
+      self.print(status)
       del process['calibrator']  # could move this to close if desired
     # TODO:status should be put on the screen!
     return status
@@ -102,6 +108,8 @@ class Camera(AcquisitionObject):
 
     elif process['mode']=='extrinsic':
       result = process['calibrator'].ex_calibrate(data, data_count)
+      # save temp data to .MOV
+      self._file.stdin.write(data.tobytes())
       return result, None
 
   def capture(self, data):
@@ -168,7 +176,7 @@ class Camera(AcquisitionObject):
           cv2.putText(frame, f"Performing {process['mode']} calibration", (50, 50),
                       cv2.FONT_HERSHEY_PLAIN, 4.0, (255, 0, 125), 2)
 
-          if str(self.device_serial_number) == str(TOP_CAM):
+          if str(self.device_serial_number) != str(TOP_CAM) and process['mode']=='intrinsic':
             cv2.drawChessboardCorners(frame, (process['calibrator'].x,process['calibrator'].y), results['corners'], results['ret'])
           else:
             if len(results['corners']) != 0:

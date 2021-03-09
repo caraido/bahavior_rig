@@ -11,7 +11,7 @@ from scipy import optimize
 from scipy.cluster.vq import whiten
 from scipy.sparse import lil_matrix
 from scipy.cluster.hierarchy import linkage, fcluster
-from utils.triangulation_utils import triangulate_points,triangulate_simple,reprojection_error_und
+from utils.triangulation_utils import triangulate_points, triangulate_simple, reprojection_error_und
 
 
 def get_expected_corners(board):
@@ -65,6 +65,63 @@ def detect_aruco_2(gray, intrinsics, board, params):
 			detectedCorners = detectedIds = []
 
 	return detectedCorners, detectedIds, corners, ids
+
+
+def detect_aruco(gray, intrinsics, board):
+
+	params = cv2.aruco.DetectorParameters_create()
+	params.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_CONTOUR
+	params.adaptiveThreshWinSizeMin = 100
+	params.adaptiveThreshWinSizeMax = 600
+	params.adaptiveThreshWinSizeStep = 50
+	params.adaptiveThreshConstant = 5
+
+	corners, ids, rejectedImgPoints = cv2.aruco.detectMarkers(
+		gray, board.dictionary, parameters=params)
+
+	if intrinsics is None:
+		INTRINSICS_K = INTRINSICS_D = None
+	else:
+		INTRINSICS_K = np.array(intrinsics['camera_mat'])
+		INTRINSICS_D = np.array(intrinsics['dist_coeff'])
+
+	if ids is None:
+		return [], []
+	elif len(ids) < 2:
+		return corners, ids
+
+	detectedCorners, detectedIds, rejectedCorners, recoveredIdxs = \
+		cv2.aruco.refineDetectedMarkers(gray, board, corners, ids,
+										rejectedImgPoints,
+										INTRINSICS_K, INTRINSICS_D,
+										parameters=params)
+
+	if len(detectedCorners) > 0:
+		ret, detectedCorners, detectedIds = cv2.aruco.interpolateCornersCharuco(
+			detectedCorners, detectedIds, gray, board)
+
+		if detectedIds is None:
+			detectedCorners = detectedIds = []
+
+	return detectedCorners, detectedIds
+
+
+def estimate_pose_aruco(gray, intrinsics, board):
+	detectedCorners, detectedIds = detect_aruco(gray, intrinsics, board)
+	if len(detectedIds) < 3:
+		return False, None
+
+	INTRINSICS_K = np.array(intrinsics['camera_mat'])
+	INTRINSICS_D = np.array(intrinsics['dist_coeff'])
+
+	ret, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
+		detectedCorners, detectedIds, board, INTRINSICS_K, INTRINSICS_D,
+		rvec=np.array([]), tvec=np.array([]), useExtrinsicGuess=False)
+
+	if not ret or rvec is None or tvec is None:
+		return False, None
+
+	return True, (detectedCorners, detectedIds, rvec, tvec)
 
 
 def estimate_pose_aruco_2(detectedCorners, detectedIds, intrinsics, board):
@@ -145,6 +202,60 @@ def mean_transform_robust(M_list, approx=None, error=0.3):
 				M_list_robust.append(M)
 
 	return mean_transform(M_list_robust)
+
+
+def get_matrices(vid_indices, videos, intrinsics_dict, board, skip=40):
+	minlen = np.inf
+	caps = dict()
+	for vid_idx, vid in zip(vid_indices, videos):
+		cap = cv2.VideoCapture(vid)
+		caps[vid_idx] = cap
+		length = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+		minlen = min(length, minlen)
+
+	go = skip
+	all_Ms = []
+	all_points = []
+
+	for framenum in trange(minlen, ncols=70):
+		M_dict = dict()
+		point_dict = dict()
+
+		for vid_idx in vid_indices:
+			cap = caps[vid_idx]
+			ret, frame = cap.read()
+
+			if framenum % skip != 0 and go <= 0:
+				continue
+
+			gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+			intrinsics = intrinsics_dict[vid_idx]
+			success, result = estimate_pose_aruco(gray, intrinsics, board)
+			if not success:
+				continue
+
+			corners, ids, rvec, tvec = result
+			M_dict[vid_idx] = make_M(rvec, tvec)
+
+			points = fill_points(corners, ids, board)
+			points_flat = points.reshape(-1, 1, 2)
+			points_new = cv2.undistortPoints(points_flat,
+											 np.array(intrinsics['camera_mat']),
+											 np.array(intrinsics['dist_coeff']))
+
+			point_dict[vid_idx] = points_new.reshape(points.shape)
+
+		if len(M_dict) >= 2:
+			go = skip
+			all_Ms.append(M_dict)
+			all_points.append(point_dict)
+
+		go = max(0, go - 1)
+
+	for vid_idx, cap in caps.items():
+		cap.release()
+
+	return all_Ms, all_points
 
 
 def get_matrices_2(cam_indices,
@@ -433,63 +544,88 @@ def estimate_calibration_errors(point_list, intrinsics_dict, extrinsics):
 
 
 def bundle_adjust(all_points, vid_indices, cam_mats, loss='linear'):
-    n_cameras = len(cam_mats)
+	n_cameras = len(cam_mats)
 
-    error_fun, points_sampled = make_error_fun(all_points, n_samples=int(300e3))
-    p3ds_sampled, _ = triangulate_points(points_sampled, cam_mats)
+	error_fun, points_sampled = make_error_fun(all_points, n_samples=int(300e3))
+	p3ds_sampled, _ = triangulate_points(points_sampled, cam_mats)
 
-    params_cams = mats_to_params(cam_mats)
-    params_points = p3ds_sampled[:, :3].reshape(-1)
-    params_full = np.hstack([params_cams, params_points])
+	params_cams = mats_to_params(cam_mats)
+	params_points = p3ds_sampled[:, :3].reshape(-1)
+	params_full = np.hstack([params_cams, params_points])
 
-    jac_sparse = build_jac_sparsity(points_sampled)
+	jac_sparse = build_jac_sparsity(points_sampled)
 
-    f_scale = np.std(points_sampled[~np.isnan(points_sampled)])*1e-2
+	f_scale = np.std(points_sampled[~np.isnan(points_sampled)]) * 1e-2
 
-    opt = optimize.least_squares(error_fun, params_full,
-                                 jac_sparsity=jac_sparse, f_scale=f_scale,
-                                 x_scale='jac', loss=loss, ftol=1e-6,
-                                 method='trf', tr_solver='lsmr', verbose=2,
-                                 max_nfev=1000)
-    best_params = opt.x
-    mats_new = params_to_mats(best_params[:n_cameras*6])
+	opt = optimize.least_squares(error_fun, params_full,
+								 jac_sparsity=jac_sparse, f_scale=f_scale,
+								 x_scale='jac', loss=loss, ftol=1e-6,
+								 method='trf', tr_solver='lsmr', verbose=2,
+								 max_nfev=1000)
+	best_params = opt.x
+	mats_new = params_to_mats(best_params[:n_cameras * 6])
 
-    extrinsics_new = dict(zip(list(map(str,vid_indices)), mats_new))
+	extrinsics_new = dict(zip(vid_indices, mats_new))
 
-    return extrinsics_new
+	return extrinsics_new
+
+
+def get_extrinsics(vid_indices, videos, intrinsics_dict, cam_align, board, skip=40):
+	matrix_list, point_list = get_matrices(vid_indices, videos, intrinsics_dict, board, skip=skip)
+
+	# pairs = get_all_matrix_pairs(matrix_list, sorted(vid_indices))
+	graph = get_calibration_graph(matrix_list, vid_indices)
+	pairs = find_calibration_pairs(graph, source=cam_align)
+	extrinsics = compute_camera_matrices(matrix_list, pairs, source=cam_align)
+
+	errors = estimate_calibration_errors(point_list, intrinsics_dict, extrinsics)
+	print('\nBefore bundle adjustment, mean reprojection error is {:.5f}'.format(np.mean(errors)))
+
+	all_points = setup_bundle_problem(point_list, extrinsics, cam_align)
+
+	cam_mats = np.array([extrinsics[vid_idx] for vid_idx in vid_indices])
+
+	t1 = time()
+	extrinsics_new = bundle_adjust(all_points, vid_indices, cam_mats)
+	t2 = time()
+	print('\nbundle adjustment took {:.1f} seconds'.format(t2 - t1))
+
+	errors = estimate_calibration_errors(point_list, intrinsics_dict, extrinsics_new)
+	print('\nAfter bundle adjustment, mean reprojection error is {:.5f}'.format(np.mean(errors)))
+
+	return extrinsics_new, np.mean(errors)
 
 
 def get_extrinsics_2(cam_indices,
-                   ids_list,
-                   corners_list,
-                   intrinsics_list,
-                   cam_align,
-                   board, skip=40):
+					 ids_list,
+					 corners_list,
+					 intrinsics_list,
+					 cam_align,
+					 board, skip=40):
+	matrix_list, point_list = get_matrices_2(cam_indices,
+											 ids_list,
+											 corners_list,
+											 intrinsics_list,
+											 board, skip=skip)
 
-    matrix_list, point_list = get_matrices_2(cam_indices,
-                                               ids_list,
-                                               corners_list,
-                                               intrinsics_list,
-                                               board, skip=skip)
+	# pairs = get_all_matrix_pairs(matrix_list, sorted(vid_indices))
+	graph = get_calibration_graph(matrix_list, cam_indices)
+	pairs = find_calibration_pairs(graph, source=cam_align)
+	extrinsics = compute_camera_matrices(matrix_list, pairs, source=cam_align)
 
-    # pairs = get_all_matrix_pairs(matrix_list, sorted(vid_indices))
-    graph = get_calibration_graph(matrix_list, cam_indices)
-    pairs = find_calibration_pairs(graph, source=cam_align)
-    extrinsics = compute_camera_matrices(matrix_list, pairs, source=cam_align)
+	errors = estimate_calibration_errors(point_list, intrinsics_list, extrinsics)
+	print('\nBefore bundle adjustment, mean reprojection error is {:.5f}'.format(np.mean(errors)))
 
-    errors = estimate_calibration_errors(point_list, intrinsics_list, extrinsics)
-    print('\nBefore bundle adjustment, mean reprojection error is {:.5f}'.format(np.mean(errors)))
+	all_points = setup_bundle_problem(point_list, extrinsics, cam_align)
 
-    all_points = setup_bundle_problem(point_list, extrinsics, cam_align)
+	cam_mats = np.array([extrinsics[cam_idx] for cam_idx in cam_indices])
 
-    cam_mats = np.array([extrinsics[cam_idx] for cam_idx in cam_indices])
+	t1 = time()
+	extrinsics_new = bundle_adjust(all_points, cam_indices, cam_mats)
+	t2 = time()
+	print('\nbundle adjustment took {:.1f} seconds'.format(t2 - t1))
 
-    t1 = time()
-    extrinsics_new = bundle_adjust(all_points, cam_indices, cam_mats)
-    t2 = time()
-    print('\nbundle adjustment took {:.1f} seconds'.format(t2 - t1))
+	errors = estimate_calibration_errors(point_list, intrinsics_list, extrinsics_new)
+	print('\nAfter bundle adjustment, mean reprojection error is {:.5f}'.format(np.mean(errors)))
 
-    errors = estimate_calibration_errors(point_list, intrinsics_list, extrinsics_new)
-    print('\nAfter bundle adjustment, mean reprojection error is {:.5f}'.format(np.mean(errors)))
-
-    return extrinsics_new, np.mean(errors)
+	return extrinsics_new, np.mean(errors)

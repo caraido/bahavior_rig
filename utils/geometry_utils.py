@@ -6,6 +6,7 @@ import os
 import pandas as pd
 from sympy import Circle,Point,sympify
 from utils.head_angle_analysis import project_from_head_to_walls,is_in_window
+from utils.calibration_utils import TOP_CAM
 
 import matplotlib.pyplot as plt
 from matplotlib.patches import Rectangle
@@ -95,31 +96,6 @@ def get_circle_center(p1, p2, p3):
     x0 = (xy21 - 2 * y0 * y21) / (2.0 * x21)
     return x0, y0
 
-
-def find_window_center(rootpath):
-    config_folder_path = os.path.join(rootpath,'config')
-    items=os.listdir(config_folder_path)
-    extrinsic = [a for a in items if 'extrinsic' in a and '17391304' in a]
-    rig = [a for a in items if 'rig' in a]
-
-    if len(extrinsic) != 0 and len(rig)==1:
-        with open(os.path.join(config_folder_path,extrinsic[0]),'r') as f:
-            config = toml.load(f)
-        try:
-            new_corners = np.array(config['undistorted_corners'])
-        except:
-            new_corners = np.array(config['corners'])
-        ids=config['ids']
-        ids = [int(i[0]) for i in ids]
-        new_corners = np.array([corner for _,corner in sorted(zip(ids,new_corners))])
-
-        if new_corners.shape != (6,1,4,2):
-            raise Exception("can't proceed! missing corners")
-        with open(os.path.join(config_folder_path,rig[0]),'r') as f:
-            rig = toml.load(f)
-        results = find_board_center_and_windows(new_corners,rig)
-        with open(os.path.join(config_folder_path, extrinsic[0]), 'a') as f:
-            toml.dump(results,f,encoder=toml.TomlNumpyEncoder())
 
 
 def find_board_center_and_windows(corners:np.ndarray,rig:dict):
